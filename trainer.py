@@ -130,7 +130,7 @@ class SupConTrainer:
             'config': self.cfg
         }
         
-        full_path = os.path.join(self.cfg.train.checkpoint_dir, self.cfg.out_str, 'checkpoints')
+        full_path = os.path.join(self.cfg.train.checkpoint_dir, 'checkpoints')
         
         if not os.path.exists(full_path):
             os.makedirs(full_path)

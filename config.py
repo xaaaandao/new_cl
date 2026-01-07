@@ -21,7 +21,7 @@ class DataConfig:
     data_config_str: str = field(init=False) 
 
     def __post_init__(self):
-        self.data_config_str = f"IMG[{self.resize_size}]_B[{self.batch_size}]"
+        self.data_config_str = f"{self.dataset_name}_IMG[{self.resize_size}]_B[{self.batch_size}]"
 
 @dataclass
 class ModelConfig:
@@ -63,15 +63,26 @@ class TrainConfig:
             os.makedirs(self.checkpoint_dir)
 
 @dataclass
+class EvalConfig:
+    svm_c: List[float] = field(default_factory=lambda: [0.01, 0.1, 1.0, 10.0])
+    svm_kernel: List[str] = field(default_factory=lambda: ['linear', 'rbf'])
+    n_jobs: int = -1
+    
+    results_file: str = ""
+    batch_size_inference: int = 64
+
+@dataclass
 class Config:
     data: DataConfig = field(default_factory=DataConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
     train: TrainConfig = field(default_factory=TrainConfig)
+    eval: EvalConfig = field(default_factory=EvalConfig)
     out_str: str = field(init=False) 
 
     def __post_init__(self):
+        self.eval.results_file = f"{self.data.data_config_str}_{self.model.model_config_str}_{self.train.train_config_str}.csv"
         self.out_str = f"{self.data.data_config_str}_{self.model.model_config_str}_{self.train.train_config_str}"
-        full_path = os.path.join(self.train.checkpoint_dir, self.out_str)
+        self.train.checkpoint_dir = os.path.join(self.train.checkpoint_dir, self.out_str)
         
-        if not os.path.exists(full_path):
-            os.makedirs(full_path)
+        if not os.path.exists(self.train.checkpoint_dir):
+            os.makedirs(self.train.checkpoint_dir)
