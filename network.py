@@ -36,6 +36,7 @@ class SupConResNet(nn.Module):
         
         # Descobrir dimensão de entrada da head (in_features da última layer original)
         dim_in = self.BACKBONE_DIM_DICT.get(name)
+        
         if dim_in is None:
             raise ValueError(f"Modelo {name} não suportado ou não mapeado.")
 
@@ -61,8 +62,7 @@ class SupConResNet(nn.Module):
             # Ex: models.resnet50
             model_fn = getattr(models, name)
             
-            # Ajuste para versões novas do Torchvision que usam 'weights'
-            # Se der erro em versões antigas, fallback para pretrained=True/False
+            # Tratamento para versões novas do Torchvision
             try:
                 model = model_fn(weights=weights) if pretrained else model_fn(weights=None)
             except TypeError:
@@ -70,7 +70,6 @@ class SupConResNet(nn.Module):
 
             # Remove a última camada (Fully Connected) original da ResNet
             # Substituímos por Identity para que o encoder retorne apenas as features puras
-            # Nota: Em ResNets do torchvision, a última camada chama-se 'fc'.
             model.fc = nn.Identity()
             
             return model

@@ -30,11 +30,9 @@ class LinearEvaluator:
         self.csv_file = os.path.join(self.results_path, 'results.csv')
 
     def load_backbone(self, checkpoint_path: str) -> SupConResNet:
-        """Carrega o modelo e restaura os pesos do checkpoint."""
         model = SupConResNet(name=self.cfg.model.name, feat_dim=self.cfg.model.feat_dim)
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
         
-        # Tratamento robusto para DataParallel (remove prefixo 'module.' se existir)
         state_dict = checkpoint['model']
         new_state_dict = {}
         
@@ -49,39 +47,28 @@ class LinearEvaluator:
         return model
 
     def extract_features(self, model: SupConResNet, loader) -> getattr:
-        """
-        Passa o dataset pelo Encoder (Backbone) e retorna features e labels.
-        Não usa a Projection Head.
-        """
         features_list = []
         labels_list = []
 
         with torch.no_grad():
             for images, labels in tqdm(loader, desc="Extraindo Features"):
-                # No loader de avaliação (ImageFolder padrão), images não é uma lista, é um tensor direto
+                
                 if isinstance(images, list):
-                    images = images[0] # Fallback caso use o loader de crop duplo
+                    images = images[0]
                 
                 images = images.to(self.device)
-                
-                # Usamos apenas o encoder, ignorando a head de projeção
-                # A saída do encoder já é o vetor de features (pool layer)
                 feats = model.encoder(images)
                 
                 features_list.append(feats.cpu().numpy())
                 labels_list.append(labels.numpy())
 
-        # Concatena todos os batches
         X = np.concatenate(features_list, axis=0)
         y = np.concatenate(labels_list, axis=0)
         return X, y
 
     def train_svm(self, X_train, y_train):
-        """Treina SVM com GridSearch e validação cruzada."""
         logger.info("Iniciando GridSearch do SVM...")
         
-        # Pipeline: Normaliza os dados antes de passar pro SVM (Melhora convergência)
-        # SVC probability=True é necessário para Top-K accuracy
         param_grid = {
             'svc__C': self.cfg.eval.svm_c,
             'svc__kernel': self.cfg.eval.svm_kernel
@@ -105,16 +92,11 @@ class LinearEvaluator:
     def compute_metrics(self, clf, X_test, y_test, epoch_num):
         """Calcula F1, Top-3 e Top-5."""
         
-        # Predições (Classes)
         y_pred = clf.predict(X_test)
-        
-        # Predições (Probabilidades) para Top-K
         y_prob = clf.predict_proba(X_test)
         
-        # Métricas
         f1 = f1_score(y_test, y_pred, average='weighted')
         
-        # Segurança: Top-k só funciona se k < numero de classes
         n_classes = len(np.unique(y_test))
         acc3 = top_k_accuracy_score(y_test, y_prob, k=3) if n_classes > 3 else 1.0
         acc5 = top_k_accuracy_score(y_test, y_prob, k=5) if n_classes > 5 else 1.0
@@ -127,7 +109,6 @@ class LinearEvaluator:
         }
 
     def save_results(self, metrics: dict):
-        """Salva a linha de resultado no CSV incrementalmente."""
         df_new = pd.DataFrame([metrics])
         
         if not os.path.exists(self.csv_file):
@@ -138,9 +119,6 @@ class LinearEvaluator:
         logger.info(f"Resultados salvos: {metrics}")
 
     def run(self):
-        """Loop principal que varre todos os checkpoints."""
-        # Busca recursiva por arquivos .pth (ex: saved_models/.../ckpt_epoch_100.pth)
-        # Ajuste o padrão de glob conforme sua estrutura real de salvamento
         base_dir = Path(self.cfg.train.checkpoint_dir).resolve()
         checkpoints_dir = base_dir / "checkpoints"
         
@@ -162,26 +140,21 @@ class LinearEvaluator:
 
         for ckpt_path in checkpoints:
             try:
-                # Tenta extrair o número da época do nome do arquivo
                 match = re.search(r'epoch_(\d+)', ckpt_path)
                 epoch_num = int(match.group(1)) if match else "last"
                 
                 logger.info(f"--- Avaliando Checkpoint: {os.path.basename(ckpt_path)} (Epoch {epoch_num}) ---")
                 
-                # 1. Carregar Backbone
                 model = self.load_backbone(ckpt_path)
                 
-                # 2. Extrair Features (Train e Test)
                 logger.info("Extraindo features de TREINO...")
                 X_train, y_train = self.extract_features(model, self.train_loader)
                 
                 logger.info("Extraindo features de TESTE...")
                 X_test, y_test = self.extract_features(model, self.test_loader)
                 
-                # 3. Treinar Classificador (Linear Probe)
                 clf = self.train_svm(X_train, y_train)
                 
-                # 4. Validar e Salvar
                 metrics = self.compute_metrics(clf, X_test, y_test, epoch_num)
                 self.save_results(metrics)
                 

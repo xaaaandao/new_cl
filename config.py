@@ -88,6 +88,6 @@ class Config:
             f"{self.model.method}"
         )
 
+    """Retorna o caminho completo onde o modelo será salvo."""
     def get_checkpoint_dir(self) -> str:
-        """Retorna o caminho completo onde o modelo será salvo."""
         return os.path.join("saved_models", self.name)

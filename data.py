@@ -29,40 +29,30 @@ class DataManager:
         logger.info(f"Normalização definida -> Mean: {self.mean}, Std: {self.std}")
     
     def _get_mean_std(self) -> Tuple[Tuple[float, ...], Tuple[float, ...]]:
-        """
-        Gerencia o cálculo ou carregamento das estatísticas (Mean/Std).
-        Usa cache (JSON) para não recalcular toda vez.
-        """
         stats_file = os.path.join(self.train_dir, 'dataset_stats.json')
         
-        # Se já calculamos antes, carrega do arquivo
         if os.path.exists(stats_file):
             logger.info(f"Carregando estatísticas de dataset em cache: {stats_file}")
             with open(stats_file, 'r') as f:
                 stats = json.load(f)
             return tuple(stats['mean']), tuple(stats['std'])
         
-        logger.info("Calculando média e desvio padrão do dataset de TREINO (Isso pode demorar um pouco)...")
+        logger.info("Calculando média e desvio padrão do dataset de TREINO...")
         return self._compute_and_save_stats(stats_file)
     
     def _compute_and_save_stats(self, save_path: str):
-        """Varre o dataset de treino para calcular estatísticas precisas."""
-        # Transformação básica apenas para converter em Tensor (sem normalizar ainda)
         pre_transform = transforms.Compose([
             transforms.Resize((self.cfg.resize_size, self.cfg.resize_size)),
             transforms.ToTensor(),
         ])
         
         dataset = datasets.ImageFolder(root=self.train_dir, transform=pre_transform)
-        
-        # Loader temporário para cálculo
         loader = DataLoader(dataset, batch_size=self.cfg.batch_size, shuffle=False, num_workers=self.cfg.num_workers)
         
         mean = 0.
         std = 0.
         nb_samples = 0.
         
-        # Passo 1: Loop para calcular
         for data, _ in tqdm(loader, desc="Calculando Stats"):
             batch_samples = data.size(0)
             data = data.view(batch_samples, data.size(1), -1)
@@ -73,11 +63,9 @@ class DataManager:
         mean /= nb_samples
         std /= nb_samples
         
-        # Converte para lista python padrão para serializar em JSON
         mean_list = mean.tolist()
         std_list = std.tolist()
         
-        # Salva para uso futuro
         with open(save_path, 'w') as f:
             json.dump({'mean': mean_list, 'std': std_list}, f)
             
