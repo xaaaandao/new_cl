@@ -20,7 +20,7 @@ class SupConTrainer:
     def __init__(self, config: Config, train_loader):
         self.cfg = config
         self.loader = train_loader
-        self.writer = SummaryWriter(log_dir=os.path.join(self.cfg.train.checkpoint_dir, 'logs'))
+        self.writer = SummaryWriter(log_dir=os.path.join(self.cfg.train.checkpoint_dir, self.cfg.out_str, 'logs'))
         
         self.model = SupConResNet(name=self.cfg.model.name, feat_dim=self.cfg.model.feat_dim)
         self.criterion = SupConLoss(temperature=self.cfg.model.temp).to(self.cfg.train.device)
@@ -129,6 +129,12 @@ class SupConTrainer:
             'optimizer': self.optimizer.state_dict(),
             'config': self.cfg
         }
-        path = os.path.join(self.cfg.train.checkpoint_dir, f'ckpt_epoch_{epoch}.pth')
+        
+        full_path = os.path.join(self.cfg.train.checkpoint_dir, self.cfg.out_str, 'checkpoints')
+        
+        if not os.path.exists(full_path):
+            os.makedirs(full_path)
+            
+        path = os.path.join(full_path, f'ckpt_epoch_{epoch}.pth')
         torch.save(state, path)
         logger.info(f"Modelo salvo em: {path}")
