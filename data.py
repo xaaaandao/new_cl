@@ -1,7 +1,14 @@
+import os
+import json
 import torch
+import logging
 from torchvision import transforms, datasets
 from torch.utils.data import DataLoader
 from config import DataConfig
+from typing import Tuple
+from tqdm import tqdm
+
+logger = logging.getLogger(__name__)
 
 class TwoCropTransform:
     def __init__(self, transform):
@@ -11,11 +18,71 @@ class TwoCropTransform:
         return [self.transform(x), self.transform(x)]
 
 class DataManager:
-    def __init__(self, config: DataConfig):
+    def __init__(self, config: DataConfig, train_dir: str):
         self.cfg = config
-        self.mean = config.mean
-        self.std = config.std
+        self.train_dir = train_dir
+        
+        self.mean, self.std = self._get_mean_std()
+        self.cfg.mean = self.mean
+        self.cfg.std = self.std
+        
+        logger.info(f"Normalização definida -> Mean: {self.mean}, Std: {self.std}")
+    
+    def _get_mean_std(self) -> Tuple[Tuple[float, ...], Tuple[float, ...]]:
+        """
+        Gerencia o cálculo ou carregamento das estatísticas (Mean/Std).
+        Usa cache (JSON) para não recalcular toda vez.
+        """
+        stats_file = os.path.join(self.train_dir, 'dataset_stats.json')
+        
+        # Se já calculamos antes, carrega do arquivo
+        if os.path.exists(stats_file):
+            logger.info(f"Carregando estatísticas de dataset em cache: {stats_file}")
+            with open(stats_file, 'r') as f:
+                stats = json.load(f)
+            return tuple(stats['mean']), tuple(stats['std'])
+        
+        logger.info("Calculando média e desvio padrão do dataset de TREINO (Isso pode demorar um pouco)...")
+        return self._compute_and_save_stats(stats_file)
+    
+    def _compute_and_save_stats(self, save_path: str):
+        """Varre o dataset de treino para calcular estatísticas precisas."""
+        # Transformação básica apenas para converter em Tensor (sem normalizar ainda)
+        pre_transform = transforms.Compose([
+            transforms.Resize((self.cfg.resize_size, self.cfg.resize_size)),
+            transforms.ToTensor(),
+        ])
+        
+        dataset = datasets.ImageFolder(root=self.train_dir, transform=pre_transform)
+        
+        # Loader temporário para cálculo
+        loader = DataLoader(dataset, batch_size=self.cfg.batch_size, shuffle=False, num_workers=self.cfg.num_workers)
+        
+        mean = 0.
+        std = 0.
+        nb_samples = 0.
+        
+        # Passo 1: Loop para calcular
+        for data, _ in tqdm(loader, desc="Calculando Stats"):
+            batch_samples = data.size(0)
+            data = data.view(batch_samples, data.size(1), -1)
+            mean += data.mean(2).sum(0)
+            std += data.std(2).sum(0)
+            nb_samples += batch_samples
 
+        mean /= nb_samples
+        std /= nb_samples
+        
+        # Converte para lista python padrão para serializar em JSON
+        mean_list = mean.tolist()
+        std_list = std.tolist()
+        
+        # Salva para uso futuro
+        with open(save_path, 'w') as f:
+            json.dump({'mean': mean_list, 'std': std_list}, f)
+            
+        return tuple(mean_list), tuple(std_list)
+    
     def get_transforms(self, mode: str = 'train'):
         normalize = transforms.Normalize(mean=self.mean, std=self.std)
         
@@ -37,20 +104,25 @@ class DataManager:
                 normalize,
             ])
 
-    def get_loader(self, dataset_path: str, is_contrastive: bool = True):
+    def get_loader(self, dataset_path: str, is_contrastive: bool = True, mode: str = 'train'):
         transform = self.get_transforms(mode='train')
         
         if is_contrastive:
             transform = TwoCropTransform(transform)
 
         dataset = datasets.ImageFolder(root=dataset_path, transform=transform)
-
+        batch_size = self.cfg.batch_size
+        
+        if mode != 'train':
+            batch_size = 1
+            
         loader = DataLoader(
             dataset,
-            batch_size=self.cfg.batch_size,
-            shuffle=True,
+            shuffle=(mode == 'train'),
+            batch_size=batch_size,
             num_workers=self.cfg.num_workers,
             pin_memory=True,
-            drop_last=True
+            drop_last=(mode == 'train')
         )
+        
         return loader

@@ -12,11 +12,11 @@ class DataConfig:
     color_space: str = 'rgb'
     
     resize_size: int = 112
-    batch_size: int = 100
+    batch_size: int = 128
     num_workers: int = 4
     
-    mean: Tuple[float, ...] = (0.894, 0.885, 0.870)
-    std: Tuple[float, ...] = (0.236, 0.256, 0.285)
+    mean: Tuple[float, ...] = None
+    std: Tuple[float, ...] = None
     
     data_config_str: str = field(init=False) 
 
@@ -36,7 +36,7 @@ class ModelConfig:
 
 @dataclass
 class TrainConfig:
-    epochs: int = 1
+    epochs: int = 50
     learning_rate: float = 0.05
     weight_decay: float = 1e-4
     momentum: float = 0.9
@@ -68,7 +68,6 @@ class EvalConfig:
     svm_kernel: List[str] = field(default_factory=lambda: ['linear', 'rbf'])
     n_jobs: int = -1
     
-    results_file: str = ""
     batch_size_inference: int = 64
 
 @dataclass
@@ -77,12 +76,18 @@ class Config:
     model: ModelConfig = field(default_factory=ModelConfig)
     train: TrainConfig = field(default_factory=TrainConfig)
     eval: EvalConfig = field(default_factory=EvalConfig)
-    out_str: str = field(init=False) 
 
-    def __post_init__(self):
-        self.eval.results_file = f"{self.data.data_config_str}_{self.model.model_config_str}_{self.train.train_config_str}.csv"
-        self.out_str = f"{self.data.data_config_str}_{self.model.model_config_str}_{self.train.train_config_str}"
-        self.train.checkpoint_dir = os.path.join(self.train.checkpoint_dir, self.out_str)
-        
-        if not os.path.exists(self.train.checkpoint_dir):
-            os.makedirs(self.train.checkpoint_dir)
+    @property
+    def name(self) -> str:
+        return (
+            f"{self.data.dataset_name}_"
+            f"IMG[{self.data.resize_size}]_"
+            f"B[{self.data.batch_size}]_"
+            f"E[{self.train.epochs}]_"
+            f"{self.model.name}_"
+            f"{self.model.method}"
+        )
+
+    def get_checkpoint_dir(self) -> str:
+        """Retorna o caminho completo onde o modelo será salvo."""
+        return os.path.join("saved_models", self.name)

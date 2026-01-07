@@ -11,6 +11,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import f1_score, top_k_accuracy_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
+from pathlib import Path
 
 from config import Config
 from network import SupConResNet
@@ -26,7 +27,7 @@ class LinearEvaluator:
         
         self.results_path = os.path.join(self.cfg.train.checkpoint_dir, 'results')
         os.makedirs(self.results_path, exist_ok=True)
-        self.csv_file = os.path.join(self.results_path, self.cfg.eval.results_file)
+        self.csv_file = os.path.join(self.results_path, 'results.csv')
 
     def load_backbone(self, checkpoint_path: str) -> SupConResNet:
         """Carrega o modelo e restaura os pesos do checkpoint."""
@@ -140,15 +141,21 @@ class LinearEvaluator:
         """Loop principal que varre todos os checkpoints."""
         # Busca recursiva por arquivos .pth (ex: saved_models/.../ckpt_epoch_100.pth)
         # Ajuste o padrão de glob conforme sua estrutura real de salvamento
-        search_pattern = os.path.join(self.cfg.train.checkpoint_dir, "checkpoints", "*.pth")
-        checkpoints = glob.glob(search_pattern, recursive=True)
+        base_dir = Path(self.cfg.train.checkpoint_dir).resolve()
+        checkpoints_dir = base_dir / "checkpoints"
         
-        # Filtrar apenas checkpoints de época (evitar 'last.pth' se for duplicado ou optimizer)
-        # Regex para extrair o número da época do nome do arquivo
-        checkpoints = sorted([c for c in checkpoints if "ckpt_epoch_" in c or "last.pth" in c])
+        logger.info(f"Buscando checkpoints em: {checkpoints_dir}")
+        
+        if not checkpoints_dir.exists():
+            raise FileNotFoundError(f"O diretorio: {checkpoints_dir} nao existe.")
+        
+        checkpoints = list(checkpoints_dir.rglob("*.pth"))
+        checkpoints = [str(p) for p in checkpoints if p.is_file()]
+        checkpoints = sorted(checkpoints)
         
         if not checkpoints:
             logger.warning(f"Nenhum checkpoint encontrado em {self.cfg.train.checkpoint_dir}")
+            logger.info(f"Conteudo encontrado na pasta: {[f.name for f in checkpoints_dir.iterdir()]}")
             return
 
         logger.info(f"Encontrados {len(checkpoints)} checkpoints para avaliar.")

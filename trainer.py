@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
+from dataclasses import asdict
 
 from config import Config
 from losses import SupConLoss
@@ -20,7 +21,7 @@ class SupConTrainer:
     def __init__(self, config: Config, train_loader):
         self.cfg = config
         self.loader = train_loader
-        self.writer = SummaryWriter(log_dir=os.path.join(self.cfg.train.checkpoint_dir, self.cfg.out_str, 'logs'))
+        self.writer = SummaryWriter(log_dir=os.path.join(self.cfg.train.checkpoint_dir, 'logs'))
         
         self.model = SupConResNet(name=self.cfg.model.name, feat_dim=self.cfg.model.feat_dim)
         self.criterion = SupConLoss(temperature=self.cfg.model.temp).to(self.cfg.train.device)
@@ -99,7 +100,7 @@ class SupConTrainer:
             end = time.time()
 
             if (idx + 1) % self.cfg.train.print_freq == 0:
-                logger.info(f'Train: [{epoch}][{idx + 1}/{len(self.loader)}] '
+                logger.info(f'Train: [{epoch}/{self.cfg.train.epochs}][{idx + 1}/{len(self.loader)}] '
                             f'Time {batch_time.val:.3f} ({batch_time.avg:.3f}) '
                             f'Loss {losses.val:.3f} ({losses.avg:.3f})')
 
@@ -127,7 +128,7 @@ class SupConTrainer:
             'epoch': epoch,
             'model': self.model.state_dict(),
             'optimizer': self.optimizer.state_dict(),
-            'config': self.cfg
+            'config': asdict(self.cfg)
         }
         
         full_path = os.path.join(self.cfg.train.checkpoint_dir, 'checkpoints')

@@ -60,3 +60,25 @@ ResNet CIFAR: Com stride=1 e kernel=3, a rede demora muito para "ver" o contexto
 | Uso de Memória      | Altíssimo em altas resoluções        | Otimizado                           |
 | Foco                | Detalhes finos em imagens minúsculas | Estrutura global em imagens normais |
 | Caso de Uso Inicial | CIFAR-10/100, TinyImageNet2          | ImageNet, COCO, Dados Reais         |
+
+## Normalização
+
+A média e desvio padrão do espectro RGB é parte do MODELO, não apenas dos dados.
+
+### Problema
+
+É assumido que os dados de treino e teste são amostrados de uma mesma distribuição subjacente.
+
+A normalização é uma transformação que mapeia o espaço de entrada original para um espaço latente normalizado.
+
+Ao utilizar a média do treino para normalizar o teste, mantemos o sistema de referência fixo.
+
+Usar a média do teste, é alterar o sistema de referência, introduzindo artificialmente um Desvio de Covariável. Desta forma o modelo interpretaria diferenças estatísticas reais (ex: um conjunto de teste mais escuro) como sendo dados "normais" (média zero), eliminando a informação que permitiria ao modelo distinguir essa variação.
+
+Além disso, o pipeline de teste deve simular o ambiente de produção com fidelidade máxima. Em um cenário de inferência, as requisições chegam unitariamente.
+
+Não é possível calcular média e desvio padrão estatisticamente significativos de uma única amostra.
+
+Calcular a média de uma única imagem e subtraí-la de si mesma resultaria em um tensor de zeros (ou próximo disso), destruindo a informação visual.
+
+Portanto, a única abordagem viável é aplicar as estatísticas pré-calculadas e armazenadas durante a fase de treinamento.
