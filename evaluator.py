@@ -118,6 +118,30 @@ class LinearEvaluator:
         
         logger.info(f"Resultados salvos: {metrics}")
 
+    def sort_csv_by_epoch(self):
+        if not os.path.exists(self.csv_file):
+            return
+
+        try:
+            logger.info("Reordenando arquivo final de resultados...")
+            df = pd.read_csv(self.csv_file)
+            
+            def epoch_sorter(val):
+                if str(val).isdigit():
+                    return int(val)
+                
+                return 999999
+            
+            df['sort_key'] = df['epoch'].apply(epoch_sorter)
+            df = df.sort_values('sort_key')
+            df = df.drop(columns=['sort_key'])
+            
+            df.to_csv(self.csv_file, index=False)
+            logger.info("Arquivo results.csv reordenado com sucesso.")
+            
+        except Exception as e:
+            logger.error(f"Erro ao reordenar CSV: {e}")
+            
     def run(self):
         base_dir = Path(self.cfg.train.checkpoint_dir).resolve()
         checkpoints_dir = base_dir / "checkpoints"
@@ -161,3 +185,5 @@ class LinearEvaluator:
             except Exception as e:
                 logger.error(f"Falha ao avaliar checkpoint {ckpt_path}: {e}")
                 continue
+            
+        self.sort_csv_by_epoch()

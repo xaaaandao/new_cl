@@ -5,6 +5,7 @@ import math
 import logging
 import torch
 import torch.nn as nn
+import pandas as pd
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 from dataclasses import asdict
@@ -118,6 +119,7 @@ class SupConTrainer:
             logger.info(f'Epoch {epoch} finalizada. Loss média: {loss:.4f}. Tempo: {time.time() - time_start:.2f}s')
             self.writer.add_scalar('loss', loss, epoch)
             self.writer.add_scalar('learning_rate', self.optimizer.param_groups[0]['lr'], epoch)
+            self.save_log(epoch, loss, time.time() - time_start)
 
             # Save Checkpoint
             if epoch % self.cfg.train.save_freq == 0 or epoch == self.cfg.train.epochs:
@@ -139,3 +141,15 @@ class SupConTrainer:
         path = os.path.join(full_path, f'ckpt_epoch_{epoch}.pth')
         torch.save(state, path)
         logger.info(f"Modelo salvo em: {path}")
+        
+    def save_log(self, epoch, loss, time_elapsed):
+        data = {
+            'epoch': epoch,
+            'loss': loss,
+            'time': time_elapsed
+        }
+        df = pd.DataFrame([data])
+        
+        csv_out_path = os.path.join(self.cfg.get_checkpoint_dir(), 'results', 'loss.csv')
+        header = not os.path.exists(csv_out_path)
+        df.to_csv(csv_out_path, mode='a', header=header, index=False)

@@ -2,9 +2,10 @@ import os
 import json
 import torch
 import logging
+from crop_random_module import RandomCropWithValidation
 from torchvision import transforms, datasets
 from torch.utils.data import DataLoader
-from config import DataConfig
+from config import DataConfig, TrainConfig
 from typing import Tuple
 from tqdm import tqdm
 
@@ -18,9 +19,10 @@ class TwoCropTransform:
         return [self.transform(x), self.transform(x)]
 
 class DataManager:
-    def __init__(self, config: DataConfig, train_dir: str):
+    def __init__(self, config: DataConfig, train_dir: str, train_config: TrainConfig):
         self.cfg = config
         self.train_dir = train_dir
+        self.train_config = train_config
         
         self.mean, self.std = self._get_mean_std()
         self.cfg.mean = self.mean
@@ -72,6 +74,31 @@ class DataManager:
         return tuple(mean_list), tuple(std_list)
     
     def get_transforms(self, mode: str = 'train'):
+        normalize = transforms.Normalize(mean=self.mean, std=self.std)
+        size = self.cfg.resize_size
+        
+        transform_list = []
+
+        if self.train_config.crop_with_validation:
+            transform_list.append(RandomCropWithValidation(size=size, min_info_ratio=self.train_config.crop_validation_info_ratio))
+        else:
+            transform_list.append(transforms.Resize((size, size)))
+
+        # 2. Augmentations (Apenas no treino)
+        if mode == 'train':
+            transform_list.append(transforms.RandomHorizontalFlip())
+            transform_list.append(transforms.RandomApply([
+                transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)
+            ], p=0.8))
+            transform_list.append(transforms.RandomGrayscale(p=0.2))
+
+        # 3. Conversão e Normalização (Sempre acontece)
+        transform_list.append(transforms.ToTensor())
+        transform_list.append(normalize)
+
+        # Retorna a composição da lista
+        return transforms.Compose(transform_list)
+    
         normalize = transforms.Normalize(mean=self.mean, std=self.std)
         
         if mode == 'train':

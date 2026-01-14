@@ -12,7 +12,7 @@ class DataConfig:
     color_space: str = 'rgb'
     
     resize_size: int = 112
-    batch_size: int = 128
+    batch_size: int = 64
     num_workers: int = 4
     
     mean: Tuple[float, ...] = None
@@ -36,7 +36,7 @@ class ModelConfig:
 
 @dataclass
 class TrainConfig:
-    epochs: int = 50
+    epochs: int = 2000
     learning_rate: float = 0.05
     weight_decay: float = 1e-4
     momentum: float = 0.9
@@ -49,11 +49,14 @@ class TrainConfig:
     warmup_epochs: int = 10
     
     print_freq: int = 1
-    save_freq: int = 50
+    save_freq: int = 100
     checkpoint_dir: str = "saved_models"
     
     device: torch.device = field(init=False)
     train_config_str: str = field(init=False) 
+    
+    crop_with_validation: bool = True
+    crop_validation_info_ratio: float = 0.1
 
     def __post_init__(self):
         self.train_config_str = f"E[{self.epochs}]"
@@ -79,8 +82,15 @@ class Config:
 
     @property
     def name(self) -> str:
+        base_str = f"{self.data.dataset_name}_"
+        
+        if self.train.crop_with_validation:
+            base_str += f"VAL_CROP[{self.train.crop_validation_info_ratio}]"
+        else:
+            base_str += f"NO_VAL_CROP"
+            
         return (
-            f"{self.data.dataset_name}_"
+            f"{base_str}_"
             f"IMG[{self.data.resize_size}]_"
             f"B[{self.data.batch_size}]_"
             f"E[{self.train.epochs}]_"
