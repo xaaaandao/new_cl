@@ -123,9 +123,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Padroniza dataset e gera estatísticas.")
     
     parser.add_argument('--dataset_dir', type=str, default='pr_dataset', help='Pasta contendo as classes...')
-    parser.add_argument('--csv_path', type=str, default='pr_dataset/info_levels.csv', help='Caminho do CSV')
+    parser.add_argument('--csv_path', type=str, default='info_levels.csv', help='Caminho do CSV')
     parser.add_argument('--execute', action='store_true', help='Aplica as mudanças.')
 
     args = parser.parse_args()
 
+    args.csv_path = os.path.join(args.dataset_dir, args.csv_path)
     standardize_structure(args.dataset_dir, args.csv_path, args.execute)
