@@ -70,7 +70,7 @@ class SupConTrainer:
         losses = AverageMeter()
         end = time.time()
 
-        for idx, (images, labels) in enumerate(self.loader):
+        for idx, (images, species_labels, genus_labels) in enumerate(self.loader):
             # Lógica de Warmup
             self.warmup_learning_rate(epoch, idx, len(self.loader))
 
@@ -78,18 +78,25 @@ class SupConTrainer:
             images = torch.cat([images[0], images[1]], dim=0)
             if torch.cuda.is_available():
                 images = images.to(self.cfg.train.device, non_blocking=True)
-                labels = labels.to(self.cfg.train.device, non_blocking=True)
-            
-            bsz = labels.shape[0]
+                species_labels = species_labels.to(self.cfg.train.device, non_blocking=True)
+                genus_labels = genus_labels.to(self.cfg.train.device, non_blocking=True)
+
+            # 1 -> espécie
+            # 2 -> gênero
+            bsz1 = species_labels.shape[0]
+            bsz2 = genus_labels.shape[0]
 
             # Forward
             features = self.model(images)
-            f1, f2 = torch.split(features, [bsz, bsz], dim=0)
-            features = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)
+            f11, f21 = torch.split(features, [bsz1, bsz1], dim=0)
+            features1 = torch.cat([f11.unsqueeze(1), f21.unsqueeze(1)], dim=1)
+
+            f12, f22 = torch.split(features, [bsz2, bsz2], dim=0)
+            features2 = torch.cat([f12.unsqueeze(1), f22.unsqueeze(1)], dim=1)
 
             # Loss
-            loss = self.criterion(features, labels)
-            losses.update(loss.item(), bsz)
+            loss = self.criterion(features1, features2, genus_labels, species_labels)
+            losses.update(loss.item(), bsz1)
 
             # Backward
             self.optimizer.zero_grad()

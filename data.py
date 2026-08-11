@@ -125,7 +125,8 @@ class DataManager:
         if is_contrastive:
             transform = TwoCropTransform(transform)
 
-        dataset = datasets.ImageFolder(root=dataset_path, transform=transform)
+        base_dataset = datasets.ImageFolder(root=dataset_path, transform=transform)
+        dataset = GenusSpeciesDataset(base_dataset)
         batch_size = self.cfg.batch_size
         
         if mode != 'train':
@@ -141,3 +142,35 @@ class DataManager:
         )
         
         return loader
+
+class GenusSpeciesDataset(torch.utils.data.Dataset):
+    """
+    Wrapper que recebe um ImageFolder e retorna (image, species_label, genus_label).
+    Assume que o nome da pasta segue o formato 'Genus+species' (ex: Peperomia+alata).
+    """
+    def __init__(self, dataset):
+        self.dataset = dataset
+
+        # Mapeia species_idx -> genus_name
+        species_names = dataset.classes  # Lista ordenada dos nomes das pastas
+        self.idx_to_genus = [name.split('+')[0] for name in species_names]
+
+        # Cria labels numéricos para gênero
+        unique_genera = sorted(list(set(self.idx_to_genus)))
+        self.genus_to_idx = {genus: idx for idx, genus in enumerate(unique_genera)}
+
+        # Pré-computa o genus_label para cada species_label
+        self.species_to_genus_idx = [
+            self.genus_to_idx[g] for g in self.idx_to_genus
+        ]
+
+        logger.info(f"Dataset: {len(dataset.classes)} espécies, {len(unique_genera)} gêneros")
+        logger.info(f"Gêneros encontrados: {unique_genera}")
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, index):
+        image, species_label = self.dataset[index]
+        genus_label = self.species_to_genus_idx[species_label]
+        return image, species_label, genus_label
