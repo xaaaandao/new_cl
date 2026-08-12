@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 from typing import Optional
 
+from torch import Tensor, device
+
+
 class SupConLoss(nn.Module):
     """
     Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf.
@@ -26,7 +29,9 @@ class SupConLoss(nn.Module):
                 features2: torch.Tensor,
                 genus_label: Optional[torch.Tensor] = None,
                 species_label: Optional[torch.Tensor] = None,
-                mask1: Optional[torch.Tensor] = None) -> torch.Tensor:
+                mask1: Optional[torch.Tensor] = None,
+                mask2: Optional[torch.Tensor] = None,
+                loss_weight: float = 0.3) -> torch.Tensor:
         """
         Calcula a loss para um batch de features.
 
@@ -57,6 +62,7 @@ class SupConLoss(nn.Module):
         elif species_label is None and mask1 is None:
             # Caso SimCLR (sem species_label): Máscara é identidade (cada imagem é par positivo dela mesma apenas)
             mask1 = torch.eye(batch_size1, dtype=torch.float32).to(device1)
+            mask2 = torch.eye(batch_size2, dtype=torch.float32).to(device2)
         elif species_label is not None and genus_label is not None:
             # Caso SupCon: Cria máscara baseada nas classes iguais
             species_label = species_label.contiguous().view(-1, 1)
@@ -69,14 +75,21 @@ class SupConLoss(nn.Module):
             mask2 = torch.eq(genus_label, genus_label.T).float().to(device2)
         else:
             mask1 = mask1.float().to(device1)
+            mask2 = mask2.float().to(device2)
 
-        contrast_count = features1.shape[1]
+        loss_species = self.calculate_loss(batch_size1, device1, features1, mask1)
+        loss_genus = self.calculate_loss(batch_size2, device2, features2, mask2)
+
+        return loss_genus * loss_weight + loss_species, loss_species, loss_genus
+
+    def calculate_loss(self, batch_size: int, device: device, features: Tensor, mask: Tensor) -> Tensor:
+        contrast_count = features.shape[1]
 
         # Desempacota as features de todas as views
-        contrast_feature = torch.cat(torch.unbind(features1, dim=1), dim=0)
+        contrast_feature = torch.cat(torch.unbind(features, dim=1), dim=0)
 
         if self.contrast_mode == 'one':
-            anchor_feature = features1[:, 0]
+            anchor_feature = features[:, 0]
             anchor_count = 1
         elif self.contrast_mode == 'all':
             anchor_feature = contrast_feature
@@ -94,30 +107,29 @@ class SupConLoss(nn.Module):
         logits = anchor_dot_contrast - logits_max.detach()
 
         # Expansão da máscara para cobrir todas as views
-        mask1 = mask1.repeat(anchor_count, contrast_count)
+        mask = mask.repeat(anchor_count, contrast_count)
 
         # Mascarar os casos de auto-contraste (a imagem comparada com ela mesma)
         logits_mask = torch.scatter(
-            torch.ones_like(mask1),
+            torch.ones_like(mask),
             1,
-            torch.arange(batch_size1 * anchor_count).view(-1, 1).to(device1),
+            torch.arange(batch_size * anchor_count).view(-1, 1).to(device),
             0
         )
 
-        mask1 = mask1 * logits_mask
+        mask = mask * logits_mask
 
         # Computa log_prob
         exp_logits = torch.exp(logits) * logits_mask
         log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True) + 1e-6)
 
         # Computa a média da log-likelihood sobre os pares positivos
-        mask_pos_pairs = mask1.sum(1)
+        mask_pos_pairs = mask.sum(1)
         mask_pos_pairs = torch.where(mask_pos_pairs < 1e-6, torch.ones_like(mask_pos_pairs), mask_pos_pairs)
 
-        mean_log_prob_pos = (mask1 * log_prob).sum(1) / mask_pos_pairs
+        mean_log_prob_pos = (mask * log_prob).sum(1) / mask_pos_pairs
 
         # Loss final
         loss = - (self.temperature / self.base_temperature) * mean_log_prob_pos
-        loss = loss.view(anchor_count, batch_size1).mean()
-
+        loss = loss.view(anchor_count, batch_size).mean()
         return loss

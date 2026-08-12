@@ -36,7 +36,7 @@ class ModelConfig:
 
 @dataclass
 class TrainConfig:
-    epochs: int = 2000
+    epochs: int = 1000
     learning_rate: float = 0.05
     weight_decay: float = 1e-4
     momentum: float = 0.9
@@ -79,6 +79,7 @@ class Config:
     model: ModelConfig = field(default_factory=ModelConfig)
     train: TrainConfig = field(default_factory=TrainConfig)
     eval: EvalConfig = field(default_factory=EvalConfig)
+    loss_weight: float = 0.0
 
     @property
     def name(self) -> str:
@@ -95,7 +96,8 @@ class Config:
             f"B[{self.data.batch_size}]_"
             f"E[{self.train.epochs}]_"
             f"{self.model.name}_"
-            f"{self.model.method}"
+            f"{self.model.method}_"
+            f"LW[{self.loss_weight}]"
         )
 
     """Retorna o caminho completo onde o modelo será salvo."""

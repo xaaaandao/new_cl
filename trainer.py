@@ -19,14 +19,15 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class SupConTrainer:
-    def __init__(self, config: Config, train_loader):
+    def __init__(self, config: Config, train_loader, loss_weight):
         self.cfg = config
         self.loader = train_loader
         self.writer = SummaryWriter(log_dir=os.path.join(self.cfg.train.checkpoint_dir, 'logs'))
         
         self.model = SupConResNet(name=self.cfg.model.name, feat_dim=self.cfg.model.feat_dim)
         self.criterion = SupConLoss(temperature=self.cfg.model.temp).to(self.cfg.train.device)
-        
+        self.loss_weight = loss_weight
+
         if torch.cuda.device_count() > 1:
             self.model = nn.DataParallel(self.model)
             
@@ -95,7 +96,7 @@ class SupConTrainer:
             features2 = torch.cat([f12.unsqueeze(1), f22.unsqueeze(1)], dim=1)
 
             # Loss
-            loss = self.criterion(features1, features2, genus_labels, species_labels)
+            loss, loss_species, loss_genus = self.criterion(features1, features2, genus_labels, species_labels, loss_weight=self.loss_weight)
             losses.update(loss.item(), bsz1)
 
             # Backward
@@ -110,9 +111,11 @@ class SupConTrainer:
             if (idx + 1) % self.cfg.train.print_freq == 0:
                 logger.info(f'Train: [{epoch}/{self.cfg.train.epochs}][{idx + 1}/{len(self.loader)}] '
                             f'Time {batch_time.val:.3f} ({batch_time.avg:.3f}) '
-                            f'Loss {losses.val:.3f} ({losses.avg:.3f})')
+                            f'Loss {losses.val:.3f} ({losses.avg:.3f})'
+                            f'Loss species ({loss_species:.3f})'
+                            f'Loss genus ({loss_genus:.3f})')
 
-        return losses.avg
+        return losses.avg, loss_species, loss_genus
 
     def run(self):
         logger.info(f"Iniciando treinamento no dispositivo: {self.cfg.train.device}")
@@ -121,12 +124,12 @@ class SupConTrainer:
             self.adjust_learning_rate(epoch)
             
             time_start = time.time()
-            loss = self.train_epoch(epoch)
+            loss, loss_species, loss_genus = self.train_epoch(epoch)
             
             logger.info(f'Epoch {epoch} finalizada. Loss média: {loss:.4f}. Tempo: {time.time() - time_start:.2f}s')
             self.writer.add_scalar('loss', loss, epoch)
             self.writer.add_scalar('learning_rate', self.optimizer.param_groups[0]['lr'], epoch)
-            self.save_log(epoch, loss, time.time() - time_start)
+            self.save_log(epoch, loss, loss_species, loss_genus, time.time() - time_start)
 
             # Save Checkpoint
             if epoch % self.cfg.train.save_freq == 0 or epoch == self.cfg.train.epochs:
@@ -149,10 +152,12 @@ class SupConTrainer:
         torch.save(state, path)
         logger.info(f"Modelo salvo em: {path}")
         
-    def save_log(self, epoch, loss, time_elapsed):
+    def save_log(self, epoch, loss, loss_species, loss_genus, time_elapsed):
         data = {
             'epoch': epoch,
             'loss': loss,
+            'loss_species': loss_species,
+            'loss_genus': loss_genus,
             'time': time_elapsed
         }
         df = pd.DataFrame([data])

@@ -51,16 +51,23 @@ class LinearEvaluator:
         labels_list = []
 
         with torch.no_grad():
-            for images, labels in tqdm(loader, desc="Extraindo Features"):
-                
+            for batch in tqdm(loader, desc="Extraindo Features"):
+
+                # GenusSpeciesDataset retorna (image, species_label, genus_label);
+                # no modo contrastivo a image vira uma lista de duas views.
+                if isinstance(batch, (list, tuple)) and len(batch) == 3:
+                    images, species_labels, _genus_labels = batch
+                else:
+                    images, species_labels = batch[0], batch[1]
+
                 if isinstance(images, list):
                     images = images[0]
-                
+
                 images = images.to(self.device)
                 feats = model.encoder(images)
-                
+
                 features_list.append(feats.cpu().numpy())
-                labels_list.append(labels.numpy())
+                labels_list.append(species_labels.numpy())
 
         X = np.concatenate(features_list, axis=0)
         y = np.concatenate(labels_list, axis=0)
@@ -79,7 +86,7 @@ class LinearEvaluator:
         clf = GridSearchCV(
             pipe,
             param_grid,
-            cv=3, # 3-Fold Cross Validation
+            cv=5, # 3-Fold Cross Validation
             n_jobs=self.cfg.eval.n_jobs,
             scoring='f1_weighted',
             verbose=1

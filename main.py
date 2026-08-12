@@ -14,6 +14,7 @@ def main():
     parser = argparse.ArgumentParser(description="Pipeline de Treinamento SupCon e Avaliação Linear")
     parser.add_argument('--train', action='store_true', help='Executa o treinamento')
     parser.add_argument('--eval', action='store_true', help='Executa a avaliação')
+    parser.add_argument('--loss_weight', type=float, default=1.0, help='Peso do loss de SupCon')
     parser.add_argument('--batch_sizes', type=int, nargs='+', default=[32], help='Lista de batch sizes para executar sequencialmente (preferencialmente múltiplos de 8). Ex: 8 16 32 64 128')
     args = parser.parse_args()
 
@@ -22,6 +23,7 @@ def main():
         sys.exit(1)
     
     cfg = Config()
+    cfg.loss_weight = args.loss_weight
     
     if args.batch_sizes is None:
         default_batch = cfg.data.batch_size
@@ -88,7 +90,7 @@ def main():
 
             train_loader = dm.get_loader(train_dir_path, is_contrastive=True, mode='train')
 
-            trainer = SupConTrainer(cfg, train_loader)
+            trainer = SupConTrainer(cfg, train_loader, args.loss_weight)
             trainer.run()
 
         if args.eval:
