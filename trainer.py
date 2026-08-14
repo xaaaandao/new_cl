@@ -111,8 +111,8 @@ class SupConTrainer:
             if (idx + 1) % self.cfg.train.print_freq == 0:
                 logger.info(f'Train: [{epoch}/{self.cfg.train.epochs}][{idx + 1}/{len(self.loader)}] '
                             f'Time {batch_time.val:.3f} ({batch_time.avg:.3f}) '
-                            f'Loss {losses.val:.3f} ({losses.avg:.3f})'
-                            f'Loss species ({loss_species:.3f})'
+                            f'Loss {losses.val:.3f} ({losses.avg:.3f}) '
+                            f'Loss species ({loss_species:.3f}) '
                             f'Loss genus ({loss_genus:.3f})')
 
         return losses.avg, loss_species, loss_genus
