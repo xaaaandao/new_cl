@@ -80,6 +80,7 @@ class Config:
     train: TrainConfig = field(default_factory=TrainConfig)
     eval: EvalConfig = field(default_factory=EvalConfig)
     loss_weight: float = 0.0
+    use_pretrained: bool = False
 
     @property
     def name(self) -> str:
@@ -97,9 +98,10 @@ class Config:
             f"E[{self.train.epochs}]_"
             f"{self.model.name}_"
             f"{self.model.method}_"
-            f"LW[{self.loss_weight}]"
+            f"LW[{self.loss_weight}]_"
+            f"USE_PRETRAINED[{self.use_pretrained}]"
         )
 
     """Retorna o caminho completo onde o modelo será salvo."""
     def get_checkpoint_dir(self) -> str:
-        return os.path.join("/mnt/eec07521-c36a-4d2b-9047-0110e7749eae/resultados-final/2loss/pr_dataset/2loss+sem_peso+9970x/3rodada", self.name)
+        return os.path.join("saved_models", self.name)

@@ -29,8 +29,8 @@ class LinearEvaluator:
         os.makedirs(self.results_path, exist_ok=True)
         self.csv_file = os.path.join(self.results_path, 'results.csv')
 
-    def load_backbone(self, checkpoint_path: str) -> SupConResNet:
-        model = SupConResNet(name=self.cfg.model.name, feat_dim=self.cfg.model.feat_dim)
+    def load_backbone(self, checkpoint_path: str, use_pretrained: bool) -> SupConResNet:
+        model = SupConResNet(name=self.cfg.model.name, feat_dim=self.cfg.model.feat_dim, use_pretrained=use_pretrained)
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
         
         state_dict = checkpoint['model']
@@ -149,7 +149,7 @@ class LinearEvaluator:
         except Exception as e:
             logger.error(f"Erro ao reordenar CSV: {e}")
             
-    def run(self):
+    def run(self, use_pretrained):
         base_dir = Path(self.cfg.train.checkpoint_dir).resolve()
         checkpoints_dir = base_dir / "checkpoints"
         
@@ -176,7 +176,7 @@ class LinearEvaluator:
                 
                 logger.info(f"--- Avaliando Checkpoint: {os.path.basename(ckpt_path)} (Epoch {epoch_num}) ---")
                 
-                model = self.load_backbone(ckpt_path)
+                model = self.load_backbone(ckpt_path, use_pretrained=use_pretrained)
                 
                 logger.info("Extraindo features de TREINO...")
                 X_train, y_train = self.extract_features(model, self.train_loader)

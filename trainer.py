@@ -19,12 +19,12 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class SupConTrainer:
-    def __init__(self, config: Config, train_loader, loss_weight):
+    def __init__(self, config: Config, train_loader, loss_weight, use_pretrained):
         self.cfg = config
         self.loader = train_loader
         self.writer = SummaryWriter(log_dir=os.path.join(self.cfg.train.checkpoint_dir, 'logs'))
         
-        self.model = SupConResNet(name=self.cfg.model.name, feat_dim=self.cfg.model.feat_dim)
+        self.model = SupConResNet(name=self.cfg.model.name, feat_dim=self.cfg.model.feat_dim, use_pretrained=use_pretrained)
         self.criterion = SupConLoss(temperature=self.cfg.model.temp).to(self.cfg.train.device)
         self.loss_weight = loss_weight
 
