@@ -19,15 +19,16 @@ from network import SupConResNet
 logger = logging.getLogger(__name__)
 
 class LinearEvaluator:
-    def __init__(self, config: Config, train_loader, test_loader):
+    def __init__(self, config: Config, train_loader, test_loader, average):
         self.cfg = config
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.device = self.cfg.train.device
-        
+        self.average = average
+
         self.results_path = os.path.join(self.cfg.train.checkpoint_dir, 'results')
         os.makedirs(self.results_path, exist_ok=True)
-        self.csv_file = os.path.join(self.results_path, 'results.csv')
+        self.csv_file = os.path.join(self.results_path, f'results+{self.average}.csv')
 
     def load_backbone(self, checkpoint_path: str, use_pretrained: bool) -> SupConResNet:
         model = SupConResNet(name=self.cfg.model.name, feat_dim=self.cfg.model.feat_dim, use_pretrained=use_pretrained)
@@ -88,7 +89,7 @@ class LinearEvaluator:
             param_grid,
             cv=5, # 3-Fold Cross Validation
             n_jobs=self.cfg.eval.n_jobs,
-            scoring='f1_weighted',
+            scoring=f'f1_{self.average}',
             verbose=1
         )
         
@@ -102,7 +103,7 @@ class LinearEvaluator:
         y_pred = clf.predict(X_test)
         y_prob = clf.predict_proba(X_test)
         
-        f1 = f1_score(y_test, y_pred, average='weighted')
+        f1 = f1_score(y_test, y_pred, average=self.average)
         
         n_classes = len(np.unique(y_test))
         acc3 = top_k_accuracy_score(y_test, y_prob, k=3) if n_classes > 3 else 1.0
