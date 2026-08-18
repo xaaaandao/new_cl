@@ -108,7 +108,7 @@ def main():
             logger.info("Carregando loader de Teste...")
             eval_test_loader = dm.get_loader(test_dir_path, is_contrastive=False, mode='test')
 
-            evaluator = LinearEvaluator(cfg, eval_train_loader, eval_test_loader)
+            evaluator = LinearEvaluator(cfg, eval_train_loader, eval_test_loader, average=args.f1[0])
             evaluator.run(args.use_pretrained)
 
 if __name__ == '__main__':
