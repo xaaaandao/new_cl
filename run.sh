@@ -8,12 +8,13 @@ do
         # echo "=========================================="
         # echo "Treinando com batch_size = $batch..."
         # echo "=========================================="
-        # python main.py --train --batch_sizes $batch --loss_weight $loss
+        python main.py --train --batch_sizes $batch --loss_weight $loss
 
         echo "=========================================="
         echo "Avaliando com batch_size = $batch..."
         echo "=========================================="
-        python main.py --eval --batch_sizes $batch --loss_weight $loss
+        python main.py --eval --batch_sizes $batch --loss_weight $loss --use_pretrained --f1 macro
+        python main.py --eval --batch_sizes $batch --loss_weight $loss --use_pretrained --f1 weighted
     done
 done
 
@@ -21,13 +22,13 @@ echo "===================================================="
 echo "Todos os treinamentos e avaliações foram concluídas!"
 echo "===================================================="
 
-# echo "===================================================="
-# echo "Criando cópia dos resultados!"
-# echo "===================================================="
-# python saved_models/copy.py
+echo "===================================================="
+echo "Criando cópia dos resultados!"
+echo "===================================================="
+python saved_models/copy.py
 
-# echo "===================================================="
-# echo "Comprimindo resultados!"
-# echo "===================================================="
-# cd saved_models
-# for d in */; do tar -czvf "${d%/}.tar.gz" "$d"; done
+echo "===================================================="
+echo "Comprimindo resultados!"
+echo "===================================================="
+cd saved_models
+for d in */; do tar -czvf "${d%/}.tar.gz" "$d"; done
