@@ -99,7 +99,8 @@ class Config:
             f"{self.model.name}_"
             f"{self.model.method}_"
             f"LW[{self.loss_weight}]_"
-            f"USE_PRETRAINED[{self.use_pretrained}]"
+            f"USE_PRETRAINED[{self.use_pretrained}]_"
+            f"COMPLEMENT"
         )
 
     """Retorna o caminho completo onde o modelo será salvo."""
