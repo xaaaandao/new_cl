@@ -88,7 +88,7 @@ class LinearEvaluator:
             param_grid,
             cv=5, # 3-Fold Cross Validation
             n_jobs=self.cfg.eval.n_jobs,
-            scoring='f1_macro',
+            scoring='f1_weighted',
             verbose=1
         )
         
@@ -102,7 +102,7 @@ class LinearEvaluator:
         y_pred = clf.predict(X_test)
         y_prob = clf.predict_proba(X_test)
         
-        f1 = f1_score(y_test, y_pred, average='macro')
+        f1 = f1_score(y_test, y_pred, average='weighted')
         
         n_classes = len(np.unique(y_test))
         acc3 = top_k_accuracy_score(y_test, y_prob, k=3) if n_classes > 3 else 1.0

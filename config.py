@@ -102,4 +102,4 @@ class Config:
 
     """Retorna o caminho completo onde o modelo será salvo."""
     def get_checkpoint_dir(self) -> str:
-        return os.path.join("saved_models", self.name)
+        return os.path.join("/mnt/eec07521-c36a-4d2b-9047-0110e7749eae/resultados-final/2loss/pr_dataset/2loss+sem_peso+9970x/3rodada", self.name)
