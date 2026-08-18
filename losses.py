@@ -77,12 +77,12 @@ class SupConLoss(nn.Module):
             mask1 = mask1.float().to(device1)
             mask2 = mask2.float().to(device2)
 
-        loss_species = self.calculate_loss(batch_size1, device1, features1, mask1)
-        loss_genus = self.calculate_loss(batch_size2, device2, features2, mask2)
+        loss_species = self.loss_function(batch_size1, device1, features1, mask1)
+        loss_genus = self.loss_function(batch_size2, device2, features2, mask2)
 
         return loss_genus * loss_weight + loss_species, loss_species.item(), loss_genus.item()
 
-    def calculate_loss(self, batch_size: int, device: device, features: Tensor, mask: Tensor) -> Tensor:
+    def loss_function(self, batch_size: int, device: device, features: Tensor, mask: Tensor) -> Tensor:
         contrast_count = features.shape[1]
 
         # Desempacota as features de todas as views
