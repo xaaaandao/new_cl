@@ -14,7 +14,7 @@ def main():
     parser = argparse.ArgumentParser(description="Pipeline de Treinamento SupCon e Avaliação Linear")
     parser.add_argument('--train', action='store_true', help='Executa o treinamento')
     parser.add_argument('--eval', action='store_true', help='Executa a avaliação')
-    parser.add_argument('--use_pretrained', action='store_true', default= False, help='Executa a avaliação')
+    parser.add_argument('--use_pretrained', action='store_true', default= False)
     parser.add_argument('--loss_weight', type=float, default=1.0, help='Peso do loss de SupCon')
     parser.add_argument('--f1', nargs=1, choices=["macro", "weighted"], default=["weighted"], help='F1-score weighted ou macro?')
     parser.add_argument('--batch_sizes', type=int, nargs='+', default=[32], help='Lista de batch sizes para executar sequencialmente (preferencialmente múltiplos de 8). Ex: 8 16 32 64 128')
