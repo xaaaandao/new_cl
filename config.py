@@ -36,7 +36,7 @@ class ModelConfig:
 
 @dataclass
 class TrainConfig:
-    epochs: int = 1000
+    epochs: int = 2000
     learning_rate: float = 0.05
     weight_decay: float = 1e-4
     momentum: float = 0.9
