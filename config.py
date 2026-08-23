@@ -79,6 +79,7 @@ class Config:
     model: ModelConfig = field(default_factory=ModelConfig)
     train: TrainConfig = field(default_factory=TrainConfig)
     eval: EvalConfig = field(default_factory=EvalConfig)
+    use_pretrained: bool = False
 
     @property
     def name(self) -> str:

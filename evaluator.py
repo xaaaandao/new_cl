@@ -19,15 +19,16 @@ from network import SupConResNet
 logger = logging.getLogger(__name__)
 
 class LinearEvaluator:
-    def __init__(self, config: Config, train_loader, test_loader):
+    def __init__(self, config: Config, train_loader, test_loader, average):
         self.cfg = config
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.device = self.cfg.train.device
-        
+        self.average = average
+
         self.results_path = os.path.join(self.cfg.train.checkpoint_dir, 'results')
         os.makedirs(self.results_path, exist_ok=True)
-        self.csv_file = os.path.join(self.results_path, 'results.csv')
+        self.csv_file = os.path.join(self.results_path, f'results+{self.average}.csv')
 
     def load_backbone(self, checkpoint_path: str) -> SupConResNet:
         model = SupConResNet(name=self.cfg.model.name, feat_dim=self.cfg.model.feat_dim)
@@ -142,7 +143,7 @@ class LinearEvaluator:
         except Exception as e:
             logger.error(f"Erro ao reordenar CSV: {e}")
             
-    def run(self):
+    def run(self, use_pretrained):
         base_dir = Path(self.cfg.train.checkpoint_dir).resolve()
         checkpoints_dir = base_dir / "checkpoints"
         
@@ -169,7 +170,7 @@ class LinearEvaluator:
                 
                 logger.info(f"--- Avaliando Checkpoint: {os.path.basename(ckpt_path)} (Epoch {epoch_num}) ---")
                 
-                model = self.load_backbone(ckpt_path)
+                model = self.load_backbone(ckpt_path, use_pretrained=use_pretrained)
                 
                 logger.info("Extraindo features de TREINO...")
                 X_train, y_train = self.extract_features(model, self.train_loader)
