@@ -96,7 +96,8 @@ class Config:
             f"B[{self.data.batch_size}]_"
             f"E[{self.train.epochs}]_"
             f"{self.model.name}_"
-            f"{self.model.method}"
+            f"{self.model.method}_"
+            f"USE_PRETRAINED[{self.use_pretrained}]"
         )
 
     """Retorna o caminho completo onde o modelo será salvo."""
