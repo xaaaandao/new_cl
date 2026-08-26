@@ -30,8 +30,8 @@ class LinearEvaluator:
         os.makedirs(self.results_path, exist_ok=True)
         self.csv_file = os.path.join(self.results_path, f'results+{self.average}.csv')
 
-    def load_backbone(self, checkpoint_path: str) -> SupConResNet:
-        model = SupConResNet(name=self.cfg.model.name, feat_dim=self.cfg.model.feat_dim)
+    def load_backbone(self, checkpoint_path: str, use_pretrained: bool) -> SupConResNet:
+        model = SupConResNet(name=self.cfg.model.name, feat_dim=self.cfg.model.feat_dim, use_pretrained=use_pretrained)
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
         
         state_dict = checkpoint['model']
