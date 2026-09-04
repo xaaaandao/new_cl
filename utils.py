@@ -81,3 +81,13 @@ def load_checkpoint(model: torch.nn.Module,
     
     logger.info(f"Carregado com sucesso (Epoch {start_epoch})")
     return start_epoch
+
+def save_features(X, y, checkpoint_dir, epoch_num, loader, train = False):
+    features_dir = "features/train" if train else "features/test"
+    os.makedirs(os.path.join(checkpoint_dir, features_dir), exist_ok=True)
+    np.save(os.path.join(checkpoint_dir, features_dir, f"features+epoch{epoch_num}.npy"), X)
+    np.save(os.path.join(checkpoint_dir, features_dir, f"labels+epoch{epoch_num}.npy"), y)
+
+    data = loader.dataset.dataset.class_to_idx
+    with open(os.path.join(checkpoint_dir, features_dir, f"labels+epoch{epoch_num}.json"), "w", encoding="utf-8") as file:
+        json.dump(data, file, indent=4, ensure_ascii=False)
