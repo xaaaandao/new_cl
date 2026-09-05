@@ -1,3 +1,6 @@
+import json
+
+import numpy as np
 import torch
 import shutil
 import os
@@ -88,6 +91,6 @@ def save_features(X, y, checkpoint_dir, epoch_num, loader, train = False):
     np.save(os.path.join(checkpoint_dir, features_dir, f"features+epoch{epoch_num}.npy"), X)
     np.save(os.path.join(checkpoint_dir, features_dir, f"labels+epoch{epoch_num}.npy"), y)
 
-    data = loader.dataset.dataset.class_to_idx
+    data = loader.dataset.class_to_idx
     with open(os.path.join(checkpoint_dir, features_dir, f"labels+epoch{epoch_num}.json"), "w", encoding="utf-8") as file:
         json.dump(data, file, indent=4, ensure_ascii=False)

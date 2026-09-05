@@ -15,6 +15,7 @@ from pathlib import Path
 
 from config import Config
 from network import SupConResNet
+from utils import save_features
 
 logger = logging.getLogger(__name__)
 
@@ -174,14 +175,16 @@ class LinearEvaluator:
                 
                 logger.info("Extraindo features de TREINO...")
                 X_train, y_train = self.extract_features(model, self.train_loader)
+                save_features(X_train, y_train, self.cfg.train.checkpoint_dir, epoch_num, self.train_loader, train=True)
                 
                 logger.info("Extraindo features de TESTE...")
                 X_test, y_test = self.extract_features(model, self.test_loader)
+                save_features(X_test, y_test, self.cfg.train.checkpoint_dir, epoch_num, self.test_loader)
+
+                # clf = self.train_svm(X_train, y_train)
                 
-                clf = self.train_svm(X_train, y_train)
-                
-                metrics = self.compute_metrics(clf, X_test, y_test, epoch_num)
-                self.save_results(metrics)
+                # metrics = self.compute_metrics(clf, X_test, y_test, epoch_num)
+                # self.save_results(metrics)
                 
             except Exception as e:
                 logger.error(f"Falha ao avaliar checkpoint {ckpt_path}: {e}")
