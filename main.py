@@ -25,8 +25,10 @@ def main():
         sys.exit(1)
     
     cfg = Config()
-    cfg.loss_weight = args.loss_weight
-    cfg.use_pretrained = args.use_pretrained
+    if args.loss_weight < 1:
+        cfg.model.loss_weight_genus = args.loss_weight
+        cfg.model.loss_weight_species = 1 - args.loss_weight
+    cfg.model.use_pretrained = args.use_pretrained
 
     if args.batch_sizes is None:
         default_batch = cfg.data.batch_size
@@ -93,7 +95,7 @@ def main():
 
             train_loader = dm.get_loader(train_dir_path, is_contrastive=True, mode='train')
 
-            trainer = SupConTrainer(cfg, train_loader, args.loss_weight, args.use_pretrained)
+            trainer = SupConTrainer(cfg, train_loader, use_pretrained=args.use_pretrained)
             trainer.run()
 
         if args.eval:

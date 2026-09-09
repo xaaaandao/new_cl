@@ -17,7 +17,7 @@ VALID_EXTENSIONS = {'.jpg', '.jpeg', '.png'}
 
 def sanitize_folder_name(name: str) -> str:
     name = str(name).strip()
-    name = name.replace(" ", "_")
+    name = name.replace(" ", "+")
     name = re.sub(r'[^\w\-]', '', name)
     return name.lower()
 

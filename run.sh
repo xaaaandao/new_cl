@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Define os valores de batch que você quer testar
-for batch in 256
+for batch in 256 512 1024
 do
-    for loss in 0.3
+    for loss in 0.05 0.6 0.15 0.45
     do
         echo "=========================================="
         echo "Treinando com batch_size = $batch..."

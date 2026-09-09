@@ -4,33 +4,45 @@ import time
 import math
 import logging
 import torch
+import numpy as np
 import torch.nn as nn
 import pandas as pd
+import matplotlib
+
+matplotlib.use('Agg')  # backend sem interface gráfica (seguro para treino em servidor)
+import matplotlib.pyplot as plt
 import torch.optim as optim
+from sklearn.manifold import TSNE
 from torch.utils.tensorboard import SummaryWriter
 from dataclasses import asdict
 
 from config import Config
 from losses import SupConLoss
-from network import SupConResNet
-from utils import AverageMeter, accuracy
+from network import MultiHeadSupConResNet
+from utils import AverageMeter
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+
 class SupConTrainer:
-    def __init__(self, config: Config, train_loader, loss_weight, use_pretrained):
+    def __init__(self, config: Config, train_loader, use_pretrained):
         self.cfg = config
         self.loader = train_loader
         self.writer = SummaryWriter(log_dir=os.path.join(self.cfg.train.checkpoint_dir, 'logs'))
-        
-        self.model = SupConResNet(name=self.cfg.model.name, feat_dim=self.cfg.model.feat_dim, use_pretrained=use_pretrained)
+
+        self.model = MultiHeadSupConResNet(
+            name=self.cfg.model.name,
+            feat_dim_genus=self.cfg.model.feat_dim_genus,
+            feat_dim_species=self.cfg.model.feat_dim_species,
+            use_pretrained=use_pretrained
+        )
+        # Mesma SupConLoss é reutilizada para as duas cabeças (é stateless em relação aos rótulos)
         self.criterion = SupConLoss(temperature=self.cfg.model.temp).to(self.cfg.train.device)
-        self.loss_weight = loss_weight
 
         if torch.cuda.device_count() > 1:
             self.model = nn.DataParallel(self.model)
-            
+
         self.model = self.model.to(self.cfg.train.device)
 
         self.optimizer = optim.SGD(
@@ -42,7 +54,7 @@ class SupConTrainer:
 
     def adjust_learning_rate(self, epoch):
         lr = self.cfg.train.learning_rate
-        
+
         if self.cfg.train.cosine_annealing:
             eta_min = lr * (self.cfg.train.lr_decay_rate ** 3)
             lr = eta_min + (lr - eta_min) * (
@@ -54,24 +66,34 @@ class SupConTrainer:
 
         for param_group in self.optimizer.param_groups:
             param_group['lr'] = lr
-            
+
         return lr
 
     def warmup_learning_rate(self, epoch, batch_id, total_batches):
         if self.cfg.train.warmup and epoch <= self.cfg.train.warmup_epochs:
             p = (batch_id + (epoch - 1) * total_batches) / (self.cfg.train.warmup_epochs * total_batches)
             lr = self.cfg.train.learning_rate * p
-            
+
             for param_group in self.optimizer.param_groups:
                 param_group['lr'] = lr
 
-    def train_epoch(self, epoch):
+    def train_epoch(self, epoch, collect_tsne: bool = False):
         self.model.train()
         batch_time = AverageMeter()
         losses = AverageMeter()
+        losses_genus = AverageMeter()
+        losses_species = AverageMeter()
         end = time.time()
 
-        for idx, (images, species_labels, genus_labels) in enumerate(self.loader):
+        # Acumulador de embeddings para o t-SNE (só é usado em epochs de checkpoint)
+        tsne_data = None
+        if collect_tsne:
+            tsne_data = {
+                'genus_feats': [], 'species_feats': [],
+                'genus_labels': [], 'species_labels': []
+            }
+
+        for idx, (images, genus_labels, species_labels) in enumerate(self.loader):
             # Lógica de Warmup
             self.warmup_learning_rate(epoch, idx, len(self.loader))
 
@@ -79,25 +101,37 @@ class SupConTrainer:
             images = torch.cat([images[0], images[1]], dim=0)
             if torch.cuda.is_available():
                 images = images.to(self.cfg.train.device, non_blocking=True)
-                species_labels = species_labels.to(self.cfg.train.device, non_blocking=True)
                 genus_labels = genus_labels.to(self.cfg.train.device, non_blocking=True)
+                species_labels = species_labels.to(self.cfg.train.device, non_blocking=True)
 
-            # 1 -> espécie
-            # 2 -> gênero
-            bsz1 = species_labels.shape[0]
-            bsz2 = genus_labels.shape[0]
+            bsz = genus_labels.shape[0]
 
-            # Forward
-            features = self.model(images)
-            f11, f21 = torch.split(features, [bsz1, bsz1], dim=0)
-            features1 = torch.cat([f11.unsqueeze(1), f21.unsqueeze(1)], dim=1)
+            # Forward -> dicionário com as duas projeções normalizadas
+            out = self.model(images)
 
-            f12, f22 = torch.split(features, [bsz2, bsz2], dim=0)
-            features2 = torch.cat([f12.unsqueeze(1), f22.unsqueeze(1)], dim=1)
+            features_genus = split_views(bsz, out['genus'])
+            features_species = split_views(bsz, out['species'])
 
-            # Loss
-            loss, loss_species, loss_genus = self.criterion(features1, features2, genus_labels, species_labels, loss_weight=self.loss_weight)
-            losses.update(loss.item(), bsz1)
+            # --- Coleta dos embeddings para o t-SNE ---
+            # Feito ANTES da função de perda: usa os mesmos embeddings que
+            # alimentam a loss, pegando só a 1ª view (índices [0:bsz]) para não
+            # duplicar pontos referentes à mesma imagem original.
+            if collect_tsne:
+                tsne_data['genus_feats'].append(out['genus'][:bsz].detach().cpu().numpy())
+                tsne_data['species_feats'].append(out['species'][:bsz].detach().cpu().numpy())
+                tsne_data['genus_labels'].append(genus_labels.detach().cpu().numpy())
+                tsne_data['species_labels'].append(species_labels.detach().cpu().numpy())
+
+            # Loss em cada nível de granularidade
+            loss_genus = self.criterion(features_genus, genus_labels)
+            loss_species = self.criterion(features_species, species_labels)
+
+            loss = (self.cfg.model.loss_weight_genus * loss_genus
+                    + self.cfg.model.loss_weight_species * loss_species)
+
+            losses.update(loss.item(), bsz)
+            losses_genus.update(loss_genus.item(), bsz)
+            losses_species.update(loss_species.item(), bsz)
 
             # Backward
             self.optimizer.zero_grad()
@@ -112,28 +146,65 @@ class SupConTrainer:
                 logger.info(f'Train: [{epoch}/{self.cfg.train.epochs}][{idx + 1}/{len(self.loader)}] '
                             f'Time {batch_time.val:.3f} ({batch_time.avg:.3f}) '
                             f'Loss {losses.val:.3f} ({losses.avg:.3f}) '
-                            f'Loss species ({loss_species:.3f}) '
-                            f'Loss genus ({loss_genus:.3f})')
+                            f'[Genus {losses_genus.val:.3f} ({losses_genus.avg:.3f}) | '
+                            f'Species {losses_species.val:.3f} ({losses_species.avg:.3f})]')
 
-        return losses.avg, loss_species, loss_genus
+        return losses.avg, losses_genus.avg, losses_species.avg, tsne_data
+
+    def save_features(self, tsne_data: dict, epoch: int):
+        """
+        Gera e salva o t-SNE (nível gênero e nível espécie) a partir dos
+        embeddings acumulados durante o train_epoch desta epoch de checkpoint.
+        Salvo na MESMA pasta do checkpoint (.pth) deste epoch.
+        Cada cor é identificada na legenda pelo NOME real da classe.
+        """
+        X_genus = np.concatenate(tsne_data['genus_feats'], axis=0)
+        X_species = np.concatenate(tsne_data['species_feats'], axis=0)
+        y_genus = np.concatenate(tsne_data['genus_labels'], axis=0)
+        y_species = np.concatenate(tsne_data['species_labels'], axis=0)
+
+        ckpt_dir = os.path.join(self.cfg.train.checkpoint_dir, 'features')
+        os.makedirs(ckpt_dir, exist_ok=True)
+
+        # Nomes reais das classes, vindos do dataset (GenusSpeciesImageFolder)
+        dataset = self.loader.dataset
+        idx_to_genus_name = getattr(dataset, 'idx_to_genus_name', None)
+        idx_to_species_name = {idx: name for name, idx in dataset.class_to_idx.items()}
+
+        filename = os.path.join(ckpt_dir, f'ckpt_epoch_{epoch}_genus')
+        np.savez(filename, X=X_genus, y=y_genus, idx_to_name=idx_to_genus_name)
+        filename = os.path.join(ckpt_dir, f'ckpt_epoch_{epoch}_species')
+        np.savez(filename, X=X_species, y=y_species, idx_to_name=idx_to_species_name)
 
     def run(self):
         logger.info(f"Iniciando treinamento no dispositivo: {self.cfg.train.device}")
-        
+
         for epoch in range(1, self.cfg.train.epochs + 1):
             self.adjust_learning_rate(epoch)
-            
-            time_start = time.time()
-            loss, loss_species, loss_genus = self.train_epoch(epoch)
-            
-            logger.info(f'Epoch {epoch} finalizada. Loss média: {loss:.4f}. Tempo: {time.time() - time_start:.2f}s')
-            self.writer.add_scalar('loss', loss, epoch)
-            self.writer.add_scalar('learning_rate', self.optimizer.param_groups[0]['lr'], epoch)
-            self.save_log(epoch, loss, loss_species, loss_genus, time.time() - time_start)
 
-            # Save Checkpoint
-            if epoch % self.cfg.train.save_freq == 0 or epoch == self.cfg.train.epochs:
+            # Esta epoch vai gerar checkpoint? Se sim, também coletamos embeddings para o t-SNE.
+            is_checkpoint_epoch = (epoch % self.cfg.train.save_freq == 0
+                                   or epoch == self.cfg.train.epochs)
+
+            time_start = time.time()
+            loss, loss_genus, loss_species, tsne_data = self.train_epoch(
+                epoch, collect_tsne=is_checkpoint_epoch
+            )
+
+            logger.info(f'Epoch {epoch} finalizada. Loss total: {loss:.4f} '
+                        f'(Genus: {loss_genus:.4f} | Species: {loss_species:.4f}). '
+                        f'Tempo: {time.time() - time_start:.2f}s')
+            self.writer.add_scalar('loss/total', loss, epoch)
+            self.writer.add_scalar('loss/genus', loss_genus, epoch)
+            self.writer.add_scalar('loss/species', loss_species, epoch)
+            self.writer.add_scalar('learning_rate', self.optimizer.param_groups[0]['lr'], epoch)
+            self.save_log(epoch, loss, loss_genus, loss_species, time.time() - time_start)
+
+            # Save Checkpoint + t-SNE (juntos, na mesma pasta)
+            if is_checkpoint_epoch:
                 self.save_model(epoch)
+                if tsne_data is not None:
+                    self.save_features(tsne_data, epoch)
 
     def save_model(self, epoch):
         state = {
@@ -142,26 +213,31 @@ class SupConTrainer:
             'optimizer': self.optimizer.state_dict(),
             'config': asdict(self.cfg)
         }
-        
+
         full_path = os.path.join(self.cfg.train.checkpoint_dir, 'checkpoints')
-        
+
         if not os.path.exists(full_path):
             os.makedirs(full_path)
-            
+
         path = os.path.join(full_path, f'ckpt_epoch_{epoch}.pth')
         torch.save(state, path)
         logger.info(f"Modelo salvo em: {path}")
-        
-    def save_log(self, epoch, loss, loss_species, loss_genus, time_elapsed):
+
+    def save_log(self, epoch, loss, loss_genus, loss_species, time_elapsed):
         data = {
             'epoch': epoch,
             'loss': loss,
-            'loss_species': loss_species,
             'loss_genus': loss_genus,
+            'loss_species': loss_species,
             'time': time_elapsed
         }
         df = pd.DataFrame([data])
-        
+
         csv_out_path = os.path.join(self.cfg.get_checkpoint_dir(), 'results', 'loss.csv')
         header = not os.path.exists(csv_out_path)
         df.to_csv(csv_out_path, mode='a', header=header, index=False)
+
+
+def split_views(bsz, features):
+    f1, f2 = torch.split(features, [bsz, bsz], dim=0)
+    return torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)

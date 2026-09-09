@@ -3,25 +3,27 @@ import torch
 from dataclasses import dataclass, field
 from typing import Tuple, List
 
+
 @dataclass
 class DataConfig:
     dataset_name: str = 'pr_dataset'
     data_path: str = "data"
-    
+
     image_size: int = 512
     color_space: str = 'rgb'
-    
+
     resize_size: int = 112
     batch_size: int = 64
-    num_workers: int = 4
-    
+    num_workers: int = 12
+
     mean: Tuple[float, ...] = None
     std: Tuple[float, ...] = None
-    
-    data_config_str: str = field(init=False) 
+
+    data_config_str: str = field(init=False)
 
     def __post_init__(self):
         self.data_config_str = f"{self.dataset_name}_IMG[{self.resize_size}]_B[{self.batch_size}]"
+
 
 @dataclass
 class ModelConfig:
@@ -29,10 +31,20 @@ class ModelConfig:
     method: str = 'SupCon'
     temp: float = 0.07
     feat_dim: int = 128
-    model_config_str: str = field(init=False) 
+    use_pretrained: bool = False
+
+    # --- Configuração para as duas cabeças de projeção (gênero / espécie) ---
+    feat_dim_genus: int = 128
+    feat_dim_species: int = 128
+    # Pesos de combinação das duas losses: loss_total = w_genus*L_genus + w_species*L_species
+    loss_weight_genus: float = 1.0
+    loss_weight_species: float = 1.0
+
+    model_config_str: str = field(init=False)
 
     def __post_init__(self):
         self.model_config_str = f"R[{self.name}]_M[{self.method}]"
+
 
 @dataclass
 class TrainConfig:
@@ -40,38 +52,40 @@ class TrainConfig:
     learning_rate: float = 0.05
     weight_decay: float = 1e-4
     momentum: float = 0.9
-    
+
     lr_decay_epochs: List[int] = field(default_factory=lambda: [100, 200, 300])
     lr_decay_rate: float = 0.1
-    
+
     cosine_annealing: bool = True
     warmup: bool = True
     warmup_epochs: int = 10
-    
+
     print_freq: int = 1
     save_freq: int = 100
     checkpoint_dir: str = "saved_models"
-    
+
     device: torch.device = field(init=False)
-    train_config_str: str = field(init=False) 
-    
+    train_config_str: str = field(init=False)
+
     crop_with_validation: bool = True
     crop_validation_info_ratio: float = 0.1
 
     def __post_init__(self):
         self.train_config_str = f"E[{self.epochs}]"
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
+
         if not os.path.exists(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
+
 
 @dataclass
 class EvalConfig:
     svm_c: List[float] = field(default_factory=lambda: [0.01, 0.1, 1.0, 10.0])
     svm_kernel: List[str] = field(default_factory=lambda: ['linear', 'rbf'])
     n_jobs: int = -1
-    
+
     batch_size_inference: int = 64
+
 
 @dataclass
 class Config:
@@ -79,29 +93,29 @@ class Config:
     model: ModelConfig = field(default_factory=ModelConfig)
     train: TrainConfig = field(default_factory=TrainConfig)
     eval: EvalConfig = field(default_factory=EvalConfig)
-    loss_weight: float = 0.0
-    use_pretrained: bool = False
 
     @property
     def name(self) -> str:
         base_str = f"{self.data.dataset_name}_"
-        
+
         if self.train.crop_with_validation:
             base_str += f"VAL_CROP[{self.train.crop_validation_info_ratio}]"
         else:
             base_str += f"NO_VAL_CROP"
-            
+
         return (
             f"{base_str}_"
             f"IMG[{self.data.resize_size}]_"
             f"B[{self.data.batch_size}]_"
             f"E[{self.train.epochs}]_"
+            f"WS[{self.model.loss_weight_species}]_"
+            f"WG[{self.model.loss_weight_genus}]_"
+            f"USE_PRETRAINED[{self.model.use_pretrained}]_"
             f"{self.model.name}_"
-            f"{self.model.method}_"
-            f"LW[{self.loss_weight}]_"
-            f"USE_PRETRAINED[{self.use_pretrained}]"
+            f"{self.model.method}"
         )
 
     """Retorna o caminho completo onde o modelo será salvo."""
+
     def get_checkpoint_dir(self) -> str:
         return os.path.join("saved_models", self.name)

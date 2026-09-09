@@ -101,3 +101,67 @@ class LinearClassifier(nn.Module):
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         return self.fc(features)
+
+
+class MultiHeadSupConResNet(nn.Module):
+    """
+    Backbone (ResNet) COMPARTILHADO + DUAS Projection Heads independentes:
+    uma para o nível de GÊNERO e outra para o nível de ESPÉCIE.
+
+    A ideia é a mesma do SupConResNet, mas em vez de uma única cabeça de
+    projeção, existem duas, cada uma aprendendo seu próprio espaço latente
+    hiperesférico. Isso permite treinar contrastive learning simultaneamente
+    em dois níveis de granularidade taxonômica, usando a mesma SupConLoss
+    duas vezes (uma por rótulo de gênero, outra por rótulo de espécie).
+    """
+
+    BACKBONE_DIM_DICT = SupConResNet.BACKBONE_DIM_DICT
+
+    def __init__(self, name: str = 'resnet50',
+                 head: Literal['linear', 'mlp'] = 'mlp',
+                 feat_dim_genus: int = 128,
+                 feat_dim_species: int = 128,
+                 use_pretrained: bool = False):
+        """
+        Args:
+            name: Nome da arquitetura (resnet18, resnet50, etc).
+            head: Tipo de projection head ('linear' ou 'mlp'), usado para as duas cabeças.
+            feat_dim_genus: Dimensão do espaço latente da cabeça de GÊNERO.
+            feat_dim_species: Dimensão do espaço latente da cabeça de ESPÉCIE.
+            use_pretrained: Se True, inicia com pesos da ImageNet (recomendado).
+        """
+        super(MultiHeadSupConResNet, self).__init__()
+
+        # 1. Backbone compartilhado (reaproveita o mesmo carregador do SupConResNet)
+        self.encoder = SupConResNet._get_backbone(self, name, use_pretrained)
+
+        dim_in = self.BACKBONE_DIM_DICT.get(name)
+        if dim_in is None:
+            raise ValueError(f"Modelo {name} não suportado ou não mapeado.")
+
+        # 2. Duas Projection Heads independentes, partindo do mesmo dim_in
+        self.head_genus = self._build_head(head, dim_in, feat_dim_genus)
+        self.head_species = self._build_head(head, dim_in, feat_dim_species)
+
+    @staticmethod
+    def _build_head(head: str, dim_in: int, feat_dim: int) -> nn.Module:
+        if head == 'linear':
+            return nn.Linear(dim_in, feat_dim)
+        elif head == 'mlp':
+            return nn.Sequential(
+                nn.Linear(dim_in, dim_in),
+                nn.ReLU(inplace=True),
+                nn.Linear(dim_in, feat_dim)
+            )
+        else:
+            raise NotImplementedError(f'Head não suportada: {head}')
+
+    def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
+        # Extração de Features (backbone compartilhado)
+        feat = self.encoder(x)
+
+        # Projeção + normalização para cada nível
+        feat_genus = F.normalize(self.head_genus(feat), dim=1)
+        feat_species = F.normalize(self.head_species(feat), dim=1)
+
+        return {'genus': feat_genus, 'species': feat_species}
