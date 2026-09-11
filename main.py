@@ -16,6 +16,7 @@ def main():
     parser.add_argument('--eval', action='store_true', help='Executa a avaliação')
     parser.add_argument('--use_pretrained', action='store_true', default= False, help='Executa a avaliação')
     parser.add_argument('--loss_weight', type=float, default=1.0, help='Peso do loss de SupCon')
+    parser.add_argument('--dataset_name', type=str, default="pr_dataset", help='Nome do dataset')
     parser.add_argument('--f1', nargs=1, choices=["macro", "weighted"], default=["weighted"], help='F1-score weighted ou macro?')
     parser.add_argument('--batch_sizes', type=int, nargs='+', default=[32], help='Lista de batch sizes para executar sequencialmente (preferencialmente múltiplos de 8). Ex: 8 16 32 64 128')
     args = parser.parse_args()
@@ -27,6 +28,7 @@ def main():
     cfg = Config()
     if args.loss_weight < 1:
         cfg.model.loss_weight_genus = args.loss_weight
+        cfg.data.dataset_name = args.dataset_name
         cfg.model.loss_weight_species = 1 - args.loss_weight
     cfg.model.use_pretrained = args.use_pretrained
 

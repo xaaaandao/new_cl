@@ -10,14 +10,6 @@ do
         echo "=========================================="
         # python main.py --train --batch_sizes $batch --loss_weight $loss
         python main.py --train --batch_sizes $batch --loss_weight $loss --use_pretrained
-
-        echo "=========================================="
-        echo "Avaliando com batch_size = $batch..."
-        echo "=========================================="
-        python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 weighted --use_pretrained
-        # python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 weighted
-        python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 macro --use_pretrained
-        # python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 macro
 	    
     done
 done
