@@ -122,7 +122,7 @@ def standardize_structure(base_path: str, info_csv_path: str, execute: bool = Fa
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Padroniza dataset e gera estatísticas.")
     
-    parser.add_argument('--dataset_dir', type=str, default='pr_dataset', help='Pasta contendo as classes...')
+    parser.add_argument('--dataset_dir', type=str, default='pr_dataset+original', help='Pasta contendo as classes...')
     parser.add_argument('--csv_path', type=str, default='info_levels.csv', help='Caminho do CSV')
     parser.add_argument('--execute', action='store_true', help='Aplica as mudanças.')
 

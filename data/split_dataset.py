@@ -106,7 +106,7 @@ def split_data(base_path: str, train_ratio: float = 0.8, seed: int = 42):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Separa dataset em treino e teste mantendo backup original.")
     
-    parser.add_argument('--path', type=str, default='pr_dataset', help='Caminho raiz do dataset')
+    parser.add_argument('--path', type=str, default='pr_dataset+original', help='Caminho raiz do dataset')
     parser.add_argument('--ratio', type=float, default=0.8, help='Proporção para treino (0.0 a 1.0)')
     parser.add_argument('--seed', type=int, default=42, help='Semente aleatória para reprodutibilidade')
 

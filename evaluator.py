@@ -94,7 +94,7 @@ class LinearEvaluator:
             'svc__kernel': self.cfg.eval.svm_kernel
         }
 
-        pipe = make_pipeline(StandardScaler(), SVC(probability=True, random_state=42))
+        pipe = make_pipeline(StandardScaler(), SVC(probability=True, random_state=42, verbose=1))
 
         clf = GridSearchCV(
             pipe,
@@ -102,7 +102,7 @@ class LinearEvaluator:
             cv=5,  # 3-Fold Cross Validation
             n_jobs=self.cfg.eval.n_jobs,
             scoring=f'f1_{self.average}',
-            verbose=1
+            verbose=-1
         )
 
         clf.fit(X_train, y_train)
@@ -194,12 +194,11 @@ class LinearEvaluator:
 
                 logger.info("Extraindo features de TREINO...")
                 X_train, y_train_genus, y_train_species = self.extract_features(model, self.train_loader)
+                self.save_features(f'features_epoch_{epoch_num}_train.npz', X_train, y_train_genus, y_train_species)
 
                 logger.info("Extraindo features de TESTE...")
                 X_test, y_test_genus, y_test_species = self.extract_features(model, self.test_loader)
-
-                # Gera os gráficos t-SNE (gênero e espécie) para este checkpoint
-                # self.plot_tsne(X_test, y_test_genus, y_test_species, epoch_num)
+                self.save_features(f'features_epoch_{epoch_num}_test.npz', X_test, y_test_genus, y_test_species)
 
                 # Avalia o mesmo espaço de features (encoder compartilhado) tanto
                 # para a tarefa de classificar GÊNERO quanto para classificar ESPÉCIE.
@@ -217,3 +216,9 @@ class LinearEvaluator:
                 continue
 
         self.sort_csv_by_epoch()
+
+    def save_features(self, epoch_num, X, y_genus, y_species, train=False):
+        filename = f"features+epoch{epoch_num}_train" if train else f"features+epoch{epoch_num}_test"
+        filename = os.path.join(self.cfg.train.checkpoint_dir, "eval", "features", filename)
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        np.savez(filename, X=X, y_genus=y_genus, y_species=y_species)
