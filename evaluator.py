@@ -94,7 +94,8 @@ class LinearEvaluator:
             'svc__kernel': self.cfg.eval.svm_kernel
         }
 
-        pipe = make_pipeline(StandardScaler(), SVC(probability=True, random_state=42, verbose=1))
+        pipe = make_pipeline(StandardScaler(),
+                             SVC(probability=True, random_state=42, verbose=1, max_iter=10000))
 
         clf = GridSearchCV(
             pipe,
@@ -194,7 +195,7 @@ class LinearEvaluator:
 
                 logger.info("Extraindo features de TREINO...")
                 X_train, y_train_genus, y_train_species = self.extract_features(model, self.train_loader)
-                self.save_features(epoch_num, X_train, y_train_genus, y_train_species)
+                self.save_features(epoch_num, X_train, y_train_genus, y_train_species, train=True)
 
                 logger.info("Extraindo features de TESTE...")
                 X_test, y_test_genus, y_test_species = self.extract_features(model, self.test_loader)
@@ -221,4 +222,5 @@ class LinearEvaluator:
         filename = f"features+epoch{epoch_num}_train" if train else f"features+epoch{epoch_num}_test"
         dst = os.path.join(self.cfg.train.checkpoint_dir, "eval", "features")
         os.makedirs(dst, exist_ok=True)
+        print(os.path.join(dst, filename))
         np.savez(os.path.join(dst, filename), X=X, y_genus=y_genus, y_species=y_species)
