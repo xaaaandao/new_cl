@@ -3,6 +3,8 @@ import sys
 import time
 import math
 import logging
+from typing import Any
+
 import torch
 import numpy as np
 import torch.nn as nn
@@ -87,8 +89,14 @@ class SupConTrainer:
 
         # Acumulador de embeddings para o t-SNE (só é usado em epochs de checkpoint)
         tsne_data = None
+        tsne_data2 = None
         if collect_tsne:
             tsne_data = {
+                'feats': [],
+                'genus_labels': [],
+                'species_labels': []
+            }
+            tsne_data2 = {
                 'genus_feats': [], 'species_feats': [],
                 'genus_labels': [], 'species_labels': []
             }
@@ -107,7 +115,13 @@ class SupConTrainer:
             bsz = genus_labels.shape[0]
 
             # Forward -> dicionário com as duas projeções normalizadas
-            out = self.model(images)
+            feat, out = self.model(collect_tsne, images)
+
+            if collect_tsne:
+                # feat = split_views(bsz, feat)
+                tsne_data['feats'].append(feat[:bsz].detach().cpu().numpy())
+                tsne_data['genus_labels'].append(genus_labels.detach().cpu().numpy())
+                tsne_data['species_labels'].append(species_labels.detach().cpu().numpy())
 
             features_genus = split_views(bsz, out['genus'])
             features_species = split_views(bsz, out['species'])
@@ -117,10 +131,10 @@ class SupConTrainer:
             # alimentam a loss, pegando só a 1ª view (índices [0:bsz]) para não
             # duplicar pontos referentes à mesma imagem original.
             if collect_tsne:
-                tsne_data['genus_feats'].append(out['genus'][:bsz].detach().cpu().numpy())
-                tsne_data['species_feats'].append(out['species'][:bsz].detach().cpu().numpy())
-                tsne_data['genus_labels'].append(genus_labels.detach().cpu().numpy())
-                tsne_data['species_labels'].append(species_labels.detach().cpu().numpy())
+                tsne_data2['genus_feats'].append(out['genus'][:bsz].detach().cpu().numpy())
+                tsne_data2['species_feats'].append(out['species'][:bsz].detach().cpu().numpy())
+                tsne_data2['genus_labels'].append(genus_labels.detach().cpu().numpy())
+                tsne_data2['species_labels'].append(species_labels.detach().cpu().numpy())
 
             # Loss em cada nível de granularidade
             loss_genus = self.criterion(features_genus, genus_labels)
@@ -149,7 +163,7 @@ class SupConTrainer:
                             f'[Genus {losses_genus.val:.3f} ({losses_genus.avg:.3f}) | '
                             f'Species {losses_species.val:.3f} ({losses_species.avg:.3f})]')
 
-        return losses.avg, losses_genus.avg, losses_species.avg, tsne_data
+        return losses.avg, losses_genus.avg, losses_species.avg, tsne_data, tsne_data2
 
     def save_features(self, tsne_data: dict, epoch: int):
         """
@@ -158,12 +172,34 @@ class SupConTrainer:
         Salvo na MESMA pasta do checkpoint (.pth) deste epoch.
         Cada cor é identificada na legenda pelo NOME real da classe.
         """
+        if len(tsne_data.keys()) == 4:
+            self.save_features_projection_head(epoch, tsne_data)
+        else:
+            self.save_features_backbone(epoch, tsne_data)
+
+    def save_features_backbone(self, epoch: int, tsne_data: dict[Any, Any]):
+        X = np.concatenate(tsne_data['feats'], axis=0)
+        y_genus = np.concatenate(tsne_data['genus_labels'], axis=0)
+        y_species = np.concatenate(tsne_data['species_labels'], axis=0)
+
+        ckpt_dir = os.path.join(self.cfg.train.checkpoint_dir, 'features', 'backbone')
+        os.makedirs(ckpt_dir, exist_ok=True)
+
+        # Nomes reais das classes, vindos do dataset (GenusSpeciesImageFolder)
+        dataset = self.loader.dataset
+        idx_to_genus_name = getattr(dataset, 'idx_to_genus_name', None)
+        idx_to_species_name = {idx: name for name, idx in dataset.class_to_idx.items()}
+
+        filename = os.path.join(ckpt_dir, f'ckpt_epoch_{epoch}')
+        np.savez(filename, X=X, y_genus=y_genus, y_species=y_species, idx_to_genus_name=idx_to_genus_name, idx_to_species_name=idx_to_species_name)
+
+    def save_features_projection_head(self, epoch: int, tsne_data: dict[Any, Any]):
         X_genus = np.concatenate(tsne_data['genus_feats'], axis=0)
         X_species = np.concatenate(tsne_data['species_feats'], axis=0)
         y_genus = np.concatenate(tsne_data['genus_labels'], axis=0)
         y_species = np.concatenate(tsne_data['species_labels'], axis=0)
 
-        ckpt_dir = os.path.join(self.cfg.train.checkpoint_dir, 'features')
+        ckpt_dir = os.path.join(self.cfg.train.checkpoint_dir, 'features', 'projection_head')
         os.makedirs(ckpt_dir, exist_ok=True)
 
         # Nomes reais das classes, vindos do dataset (GenusSpeciesImageFolder)
@@ -187,7 +223,7 @@ class SupConTrainer:
                                    or epoch == self.cfg.train.epochs)
 
             time_start = time.time()
-            loss, loss_genus, loss_species, tsne_data = self.train_epoch(
+            loss, loss_genus, loss_species, tsne_data, tsne_data2 = self.train_epoch(
                 epoch, collect_tsne=is_checkpoint_epoch
             )
 
@@ -203,6 +239,8 @@ class SupConTrainer:
             # Save Checkpoint + t-SNE (juntos, na mesma pasta)
             if is_checkpoint_epoch:
                 self.save_model(epoch)
+                if tsne_data2 is not None:
+                    self.save_features(tsne_data2, epoch)
                 if tsne_data is not None:
                     self.save_features(tsne_data, epoch)
 

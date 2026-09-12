@@ -156,7 +156,7 @@ class MultiHeadSupConResNet(nn.Module):
         else:
             raise NotImplementedError(f'Head não suportada: {head}')
 
-    def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
+    def forward(self, collect_tsne: bool, x: torch.Tensor) -> Dict[str, torch.Tensor]:
         # Extração de Features (backbone compartilhado)
         feat = self.encoder(x)
 
@@ -164,4 +164,4 @@ class MultiHeadSupConResNet(nn.Module):
         feat_genus = F.normalize(self.head_genus(feat), dim=1)
         feat_species = F.normalize(self.head_species(feat), dim=1)
 
-        return {'genus': feat_genus, 'species': feat_species}
+        return feat, {'genus': feat_genus, 'species': feat_species}
