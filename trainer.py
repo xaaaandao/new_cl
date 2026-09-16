@@ -3,6 +3,8 @@ import sys
 import time
 import math
 import logging
+
+import numpy as np
 import torch
 import torch.nn as nn
 import pandas as pd
@@ -38,6 +40,15 @@ class SupConTrainer:
             momentum=self.cfg.train.momentum,
             weight_decay=self.cfg.train.weight_decay
         )
+
+        self.feats_backbone = {
+            'feats': [],
+            'labels': []
+        }
+        self.feats_projection_head = {
+            'feats': [],
+            'labels': []
+        }
 
     def adjust_learning_rate(self, epoch):
         lr = self.cfg.train.learning_rate
@@ -81,14 +92,18 @@ class SupConTrainer:
                 labels = labels.to(self.cfg.train.device, non_blocking=True)
             
             bsz = labels.shape[0]
-
             # Forward
-            features = self.model(images)
-            f1, f2 = torch.split(features, [bsz, bsz], dim=0)
-            features = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)
+            features, out = self.model(images)
+
+            self.set_feats_backbone(bsz, features, labels)
+
+            f1, f2 = torch.split(out, [bsz, bsz], dim=0)
+            out = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)
+
+            self.set_feats_projection_head(bsz, out, labels)
 
             # Loss
-            loss = self.criterion(features, labels)
+            loss = self.criterion(out, labels)
             losses.update(loss.item(), bsz)
 
             # Backward
@@ -124,6 +139,22 @@ class SupConTrainer:
             # Save Checkpoint
             if epoch % self.cfg.train.save_freq == 0 or epoch == self.cfg.train.epochs:
                 self.save_model(epoch)
+                self.save_feats(epoch, self.feats_backbone)
+                self.save_feats(epoch, self.feats_projection_head, is_backbone=False)
+
+    def save_feats(self, epoch: int, features, is_backbone=True):
+        X = np.concatenate(features['feats'], axis=0)
+        y = np.concatenate(features['labels'], axis=0)
+
+        ckpt_dir = os.path.join(self.cfg.train.checkpoint_dir, 'features', 'backbone') if is_backbone else os.path.join(self.cfg.train.checkpoint_dir, 'features', 'projection_head')
+        os.makedirs(ckpt_dir, exist_ok=True)
+
+        # Nomes reais das classes, vindos do dataset (GenusSpeciesImageFolder)
+        dataset = self.loader.dataset
+        idx_to_label = getattr(dataset, 'class_to_idx', None)
+
+        filename = os.path.join(ckpt_dir, f'ckpt_epoch_{epoch}')
+        np.savez(filename, X=X, y=y, idx_to_label=idx_to_label)
 
     def save_model(self, epoch):
         state = {
@@ -153,3 +184,11 @@ class SupConTrainer:
         csv_out_path = os.path.join(self.cfg.get_checkpoint_dir(), 'results', 'loss.csv')
         header = not os.path.exists(csv_out_path)
         df.to_csv(csv_out_path, mode='a', header=header, index=False)
+
+    def set_feats_backbone(self, bsz, features, labels):
+        self.feats_backbone['feats'].append(features[:bsz].detach().cpu().numpy())
+        self.feats_backbone['labels'].append(labels.detach().cpu().numpy())
+
+    def set_feats_projection_head(self, bsz, features, labels):
+        self.feats_projection_head['feats'].append(features[:bsz].detach().cpu().numpy())
+        self.feats_projection_head['labels'].append(labels.detach().cpu().numpy())

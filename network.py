@@ -82,12 +82,12 @@ class SupConResNet(nn.Module):
         feat = self.encoder(x)
         
         # Projeção
-        feat = self.head(feat)
+        out = self.head(feat)
         
         # Normalização (Crucial para Contrastive Loss operar na hiperesfera)
-        feat = F.normalize(feat, dim=1)
+        out = F.normalize(out, dim=1)
         
-        return feat
+        return feat, out
 
 class LinearClassifier(nn.Module):
     """
