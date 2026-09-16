@@ -114,11 +114,10 @@ class SupConTrainer:
 
             bsz = genus_labels.shape[0]
 
-            # Forward -> dicionário com as duas projeções normalizadas
             feat, out = self.model(collect_tsne, images)
 
+            # sem a project head
             if collect_tsne:
-                # feat = split_views(bsz, feat)
                 tsne_data['feats'].append(feat[:bsz].detach().cpu().numpy())
                 tsne_data['genus_labels'].append(genus_labels.detach().cpu().numpy())
                 tsne_data['species_labels'].append(species_labels.detach().cpu().numpy())
@@ -126,10 +125,7 @@ class SupConTrainer:
             features_genus = split_views(bsz, out['genus'])
             features_species = split_views(bsz, out['species'])
 
-            # --- Coleta dos embeddings para o t-SNE ---
-            # Feito ANTES da função de perda: usa os mesmos embeddings que
-            # alimentam a loss, pegando só a 1ª view (índices [0:bsz]) para não
-            # duplicar pontos referentes à mesma imagem original.
+            # com a project head
             if collect_tsne:
                 tsne_data2['genus_feats'].append(out['genus'][:bsz].detach().cpu().numpy())
                 tsne_data2['species_feats'].append(out['species'][:bsz].detach().cpu().numpy())

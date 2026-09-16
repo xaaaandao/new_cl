@@ -1,18 +1,12 @@
 import os
 import torch
-import glob
 import logging
 import re
 import numpy as np
 import pandas as pd
-import matplotlib
-from matplotlib import use
 
-matplotlib.use('Agg')  # backend sem interface gráfica, seguro para rodar em servidor/headless
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 from sklearn.svm import SVC
-from sklearn.manifold import TSNE
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import f1_score, top_k_accuracy_score
 from sklearn.preprocessing import StandardScaler
@@ -26,16 +20,18 @@ logger = logging.getLogger(__name__)
 
 
 class LinearEvaluator:
-    def __init__(self, config: Config, train_loader, test_loader, average):
+    def __init__(self, config: Config, train_loader, test_loader, average, max_iter):
         self.cfg = config
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.device = self.cfg.train.device
+        self.max_iter = max_iter
         self.average = average
 
         self.results_path = os.path.join(self.cfg.train.checkpoint_dir, 'results')
         os.makedirs(self.results_path, exist_ok=True)
-        self.csv_file = os.path.join(self.results_path, f'results+{average}.csv')
+        self.csv_file = f'results+{average}.csv' if self.max_iter == -1 else f'results+{average}+maxiter={self.max_iter}.csv'
+        self.csv_file = os.path.join(self.results_path, self.csv_file)
 
     def load_backbone(self, checkpoint_path: str, use_pretrained) -> MultiHeadSupConResNet:
         model = MultiHeadSupConResNet(
@@ -94,8 +90,7 @@ class LinearEvaluator:
             'svc__kernel': self.cfg.eval.svm_kernel
         }
 
-        pipe = make_pipeline(StandardScaler(),
-                             SVC(probability=True, random_state=42, verbose=1, max_iter=10000))
+        pipe = make_pipeline(StandardScaler(), SVC(probability=True, random_state=42, max_iter=self.max_iter))
 
         clf = GridSearchCV(
             pipe,
@@ -108,7 +103,7 @@ class LinearEvaluator:
 
         clf.fit(X_train, y_train)
         logger.info(f"Melhor estimador encontrado: {clf.best_params_}")
-        return clf.best_estimator_
+        return clf.best_estimator_, clf.best_estimator_.named_steps['svc'].n_iter_.tolist()
 
     def compute_metrics(self, clf, X_test, y_test, epoch_num, level: str):
         """Calcula F1, Top-3 e Top-5 para um dado nível ('genus' ou 'species')."""
@@ -139,6 +134,23 @@ class LinearEvaluator:
             df_new.to_csv(self.csv_file, mode='a', header=False, index=False)
 
         logger.info(f"Resultados salvos: {metrics}")
+
+    def save_n_iters(self, epoch_num, level, n_iters):
+        data = {
+            "epoch": epoch_num,
+            "level": level,
+            "n_iters": n_iters
+        }
+        df = pd.DataFrame([data])
+
+        eval_dir = os.path.join(self.cfg.train.checkpoint_dir, 'eval')
+        os.makedirs(eval_dir, exist_ok=True)
+        csv_n_iters_file = os.path.join(eval_dir, f"n_iters.csv")
+        if not os.path.exists(csv_n_iters_file):
+            df.to_csv(csv_n_iters_file, index=False)
+        else:
+            df.to_csv(csv_n_iters_file, mode='a', header=False, index=False)
+
 
     def sort_csv_by_epoch(self):
         if not os.path.exists(self.csv_file):
@@ -195,11 +207,9 @@ class LinearEvaluator:
 
                 logger.info("Extraindo features de TREINO...")
                 X_train, y_train_genus, y_train_species = self.extract_features(model, self.train_loader)
-                self.save_features(epoch_num, X_train, y_train_genus, y_train_species, train=True)
 
                 logger.info("Extraindo features de TESTE...")
                 X_test, y_test_genus, y_test_species = self.extract_features(model, self.test_loader)
-                self.save_features(epoch_num, X_test, y_test_genus, y_test_species)
 
                 # Avalia o mesmo espaço de features (encoder compartilhado) tanto
                 # para a tarefa de classificar GÊNERO quanto para classificar ESPÉCIE.
@@ -208,19 +218,13 @@ class LinearEvaluator:
                     ('species', y_train_species, y_test_species),
                 ]:
                     logger.info(f"--- Nível: {level} ---")
-                    clf = self.train_svm(X_train, y_train)
+                    clf, n_iters = self.train_svm(X_train, y_train)
                     metrics = self.compute_metrics(clf, X_test, y_test, epoch_num, level)
                     self.save_results(metrics)
+                    self.save_n_iters(epoch_num, level, n_iters)
 
             except Exception as e:
                 logger.error(f"Falha ao avaliar checkpoint {ckpt_path}: {e}")
                 continue
 
         self.sort_csv_by_epoch()
-
-    def save_features(self, epoch_num, X, y_genus, y_species, train=False):
-        filename = f"features+epoch{epoch_num}_train" if train else f"features+epoch{epoch_num}_test"
-        dst = os.path.join(self.cfg.train.checkpoint_dir, "eval", "features")
-        os.makedirs(dst, exist_ok=True)
-        print(os.path.join(dst, filename))
-        np.savez(os.path.join(dst, filename), X=X, y_genus=y_genus, y_species=y_species)
