@@ -30,9 +30,9 @@ def main():
 
     if args.loss_weight < 1:
         cfg.model.loss_weight_genus = args.loss_weight
-        cfg.data.dataset_name = args.dataset_name
         cfg.model.loss_weight_species = 1 - args.loss_weight
     cfg.model.use_pretrained = args.use_pretrained
+    cfg.data.dataset_name = args.dataset_name
 
     if args.batch_sizes is None:
         default_batch = cfg.data.batch_size
