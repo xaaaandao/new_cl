@@ -15,6 +15,8 @@ def main():
     parser.add_argument('--train', action='store_true', help='Executa o treinamento')
     parser.add_argument('--eval', action='store_true', help='Executa a avaliação')
     parser.add_argument('--use_pretrained', action='store_true', default=False)
+    parser.add_argument('--dataset_name', type=str, default="pr_dataset", help='Nome do dataset')
+    parser.add_argument('--max_iter', type=int, default=-1, help='Número de iterações do SVM')
     parser.add_argument('--f1', nargs=1, choices=["macro", "weighted"], default=["weighted"], help='F1-score weighted ou macro?')
     parser.add_argument('--batch_sizes', type=int, nargs='+', default=[32], help='Lista de batch sizes para executar sequencialmente (preferencialmente múltiplos de 8). Ex: 8 16 32 64 128')
     args = parser.parse_args()
@@ -25,6 +27,7 @@ def main():
     
     cfg = Config()
     cfg.use_pretrained = args.use_pretrained
+    cfg.data.dataset_name = args.dataset_name
     
     if args.batch_sizes is None:
         default_batch = cfg.data.batch_size
@@ -106,7 +109,7 @@ def main():
             logger.info("Carregando loader de Teste...")
             eval_test_loader = dm.get_loader(test_dir_path, is_contrastive=False, mode='test')
 
-            evaluator = LinearEvaluator(cfg, eval_train_loader, eval_test_loader, average=args.f1[0])
+            evaluator = LinearEvaluator(cfg, eval_train_loader, eval_test_loader, average=args.f1[0], max_iter=args.max_iter)
             evaluator.run(args.use_pretrained)
 
 

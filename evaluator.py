@@ -20,16 +20,18 @@ from utils import save_features
 logger = logging.getLogger(__name__)
 
 class LinearEvaluator:
-    def __init__(self, config: Config, train_loader, test_loader, average):
+    def __init__(self, config: Config, train_loader, test_loader, average, max_iter):
         self.cfg = config
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.device = self.cfg.train.device
+        self.max_iter = max_iter
         self.average = average
 
         self.results_path = os.path.join(self.cfg.train.checkpoint_dir, 'results')
         os.makedirs(self.results_path, exist_ok=True)
-        self.csv_file = os.path.join(self.results_path, f'results+{self.average}.csv')
+        self.csv_file = f'results+{average}.csv' if self.max_iter == -1 else f'results+{average}+maxiter={self.max_iter}.csv'
+        self.csv_file = os.path.join(self.results_path, self.csv_file)
 
     def load_backbone(self, checkpoint_path: str, use_pretrained: bool) -> SupConResNet:
         model = SupConResNet(name=self.cfg.model.name, feat_dim=self.cfg.model.feat_dim, use_pretrained=use_pretrained)
@@ -89,7 +91,7 @@ class LinearEvaluator:
         
         clf.fit(X_train, y_train)
         logger.info(f"Melhor estimador encontrado: {clf.best_params_}")
-        return clf.best_estimator_
+        return clf.best_estimator_, clf.best_estimator_.named_steps['svc'].n_iter_.tolist()
 
     def compute_metrics(self, clf, X_test, y_test, epoch_num):
         """Calcula F1, Top-3 e Top-5."""
@@ -119,6 +121,21 @@ class LinearEvaluator:
             df_new.to_csv(self.csv_file, mode='a', header=False, index=False)
         
         logger.info(f"Resultados salvos: {metrics}")
+
+    def save_n_iters(self, epoch_num, n_iters):
+        data = {
+            "epoch": epoch_num,
+            "n_iters": n_iters
+        }
+        df = pd.DataFrame([data])
+
+        eval_dir = os.path.join(self.cfg.train.checkpoint_dir, 'eval')
+        os.makedirs(eval_dir, exist_ok=True)
+        csv_n_iters_file = os.path.join(eval_dir, f"n_iters.csv")
+        if not os.path.exists(csv_n_iters_file):
+            df.to_csv(csv_n_iters_file, index=False)
+        else:
+            df.to_csv(csv_n_iters_file, mode='a', header=False, index=False)
 
     def sort_csv_by_epoch(self):
         if not os.path.exists(self.csv_file):
@@ -175,16 +192,17 @@ class LinearEvaluator:
                 
                 logger.info("Extraindo features de TREINO...")
                 X_train, y_train = self.extract_features(model, self.train_loader)
-                save_features(X_train, y_train, self.cfg.train.checkpoint_dir, epoch_num, self.train_loader, train=True)
+                # save_features(X_train, y_train, self.cfg.train.checkpoint_dir, epoch_num, self.train_loader, train=True)
                 
                 logger.info("Extraindo features de TESTE...")
                 X_test, y_test = self.extract_features(model, self.test_loader)
-                save_features(X_test, y_test, self.cfg.train.checkpoint_dir, epoch_num, self.test_loader)
+                # save_features(X_test, y_test, self.cfg.train.checkpoint_dir, epoch_num, self.test_loader)
 
-                # clf = self.train_svm(X_train, y_train)
+                clf = self.train_svm(X_train, y_train)
                 
-                # metrics = self.compute_metrics(clf, X_test, y_test, epoch_num)
-                # self.save_results(metrics)
+                metrics, n_iters = self.compute_metrics(clf, X_test, y_test, epoch_num)
+                self.save_results(metrics)
+                self.save_n_iters(epoch_num, n_iters)
                 
             except Exception as e:
                 logger.error(f"Falha ao avaliar checkpoint {ckpt_path}: {e}")
