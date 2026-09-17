@@ -156,7 +156,7 @@ class MultiHeadSupConResNet(nn.Module):
         else:
             raise NotImplementedError(f'Head não suportada: {head}')
 
-    def forward(self, collect_tsne: bool, x: torch.Tensor) -> Dict[str, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
         # Extração de Features (backbone compartilhado)
         feat = self.encoder(x)
 
