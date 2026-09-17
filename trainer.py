@@ -41,14 +41,8 @@ class SupConTrainer:
             weight_decay=self.cfg.train.weight_decay
         )
 
-        self.feats_backbone = {
-            'feats': [],
-            'labels': []
-        }
-        self.feats_projection_head = {
-            'feats': [],
-            'labels': []
-        }
+        self.feats_backbone = None
+        self.feats_projection_head = None
 
     def adjust_learning_rate(self, epoch):
         lr = self.cfg.train.learning_rate
@@ -80,6 +74,15 @@ class SupConTrainer:
         batch_time = AverageMeter()
         losses = AverageMeter()
         end = time.time()
+
+        self.feats_backbone = {
+            'feats': [],
+            'labels': []
+        }
+        self.feats_projection_head = {
+            'feats': [],
+            'labels': []
+        }
 
         for idx, (images, labels) in enumerate(self.loader):
             # Lógica de Warmup
