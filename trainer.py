@@ -100,13 +100,12 @@ class SupConTrainer:
 
             self.set_feats_backbone(bsz, features, labels)
 
-            f1, f2 = torch.split(out, [bsz, bsz], dim=0)
-            out = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)
+            out_a = split_views(bsz, out)
 
             self.set_feats_projection_head(bsz, out, labels)
 
             # Loss
-            loss = self.criterion(out, labels)
+            loss = self.criterion(out_a, labels)
             losses.update(loss.item(), bsz)
 
             # Backward
@@ -195,3 +194,7 @@ class SupConTrainer:
     def set_feats_projection_head(self, bsz, features, labels):
         self.feats_projection_head['feats'].append(features[:bsz].detach().cpu().numpy())
         self.feats_projection_head['labels'].append(labels.detach().cpu().numpy())
+
+def split_views(bsz, features):
+    f1, f2 = torch.split(features, [bsz, bsz], dim=0)
+    return torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)

@@ -80,13 +80,13 @@ class SupConResNet(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Extração de Features
         feat = self.encoder(x)
-        
+
         # Projeção
-        out = self.head(feat)
-        
+        feat_proj = self.head(feat)
+
         # Normalização (Crucial para Contrastive Loss operar na hiperesfera)
-        out = F.normalize(out, dim=1)
-        
+        out = F.normalize(feat_proj, dim=1)
+
         return feat, out
 
 class LinearClassifier(nn.Module):
