@@ -4,18 +4,12 @@
 for batch in 8 16 32 256 512
 do
     echo "=========================================="
-    echo "Treinando com batch_size = $batch..."
-    echo "=========================================="
-    python main.py --train --batch_sizes $batch
-    python main.py --train --batch_sizes $batch --use_pretrained
-
-    echo "=========================================="
     echo "Avaliando com batch_size = $batch..."
     echo "=========================================="
-    python main.py --eval --batch_sizes $batch --f1 weighted --use_pretrained
-    python main.py --eval --batch_sizes $batch --f1 weighted
-    python main.py --eval --batch_sizes $batch --f1 macro --use_pretrained
-    python main.py --eval --batch_sizes $batch --f1 macro
+    python main.py --eval --batch_sizes $batch --f1 weighted --use_pretrained --dataset_name "herbarium2019+min=50"
+    python main.py --eval --batch_sizes $batch --f1 weighted --use_pretrained --max_iter 10000 --dataset_name "herbarium2019+min=50"
+    python main.py --eval --batch_sizes $batch --f1 macro --use_pretrained --dataset_name "herbarium2019+min=50"
+    python main.py --eval --batch_sizes $batch --f1 macro --use_pretrained --max_iter 10000 --dataset_name "herbarium2019+min=50"
 done
 
 echo "===================================================="
