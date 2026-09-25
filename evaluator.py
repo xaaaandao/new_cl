@@ -19,13 +19,14 @@ from network import SupConResNet
 logger = logging.getLogger(__name__)
 
 class LinearEvaluator:
-    def __init__(self, config: Config, train_loader, test_loader, average, max_iter):
+    def __init__(self, config: Config, train_loader, test_loader, average, max_iter, eval_epochs):
         self.cfg = config
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.device = self.cfg.train.device
         self.max_iter = max_iter
         self.average = average
+        self.eval_epochs = eval_epochs
 
         self.results_path = os.path.join(self.cfg.train.checkpoint_dir, 'results')
         os.makedirs(self.results_path, exist_ok=True)
@@ -171,6 +172,8 @@ class LinearEvaluator:
         
         checkpoints = list(checkpoints_dir.rglob("*.pth"))
         checkpoints = [str(p) for p in checkpoints if p.is_file()]
+        if self.eval_epochs > 0:
+            checkpoints = self.filter_checkpoints(checkpoints)
         checkpoints = sorted(checkpoints)
         
         if not checkpoints:
@@ -206,3 +209,12 @@ class LinearEvaluator:
                 continue
             
         self.sort_csv_by_epoch()
+
+    def filter_checkpoints(self, checkpoints):
+        max_checkpoint = max([get_epoch(c) for c in checkpoints])
+        aux = max_checkpoint // self.eval_epochs
+        return [c for c in checkpoints if get_epoch(c) % aux == 0]
+
+def get_epoch(ckpt_path):
+    match = re.search(r'epoch_(\d+)', ckpt_path)
+    return int(match.group(1)) if match else "last"
