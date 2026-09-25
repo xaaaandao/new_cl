@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # Define os valores de batch que você quer testar
-for batch in 8 16 32 64 128 256 512 1024
+for batch in 256
 do
-    for loss in 0.15 0.05 0.45 0.6
+    for loss in 0.15
     do
         echo "=========================================="
         echo "Avaliando com batch_size = $batch..."
         echo "=========================================="
-        python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 weighted --use_pretrained
+        python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 weighted --use_pretrained --dataset_name "herbarium2019+min=50" --max_iter 10000
         # python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 weighted
         # python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 macro --use_pretrained --dataset_name "herbarium2019+min=50"
         # python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 macro

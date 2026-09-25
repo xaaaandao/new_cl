@@ -90,7 +90,7 @@ class LinearEvaluator:
             'svc__kernel': self.cfg.eval.svm_kernel
         }
 
-        pipe = make_pipeline(StandardScaler(), SVC(probability=True, random_state=42, max_iter=self.max_iter))
+        pipe = make_pipeline(StandardScaler(), SVC(probability=True, random_state=42, verbose=True, max_iter=self.max_iter))
 
         clf = GridSearchCV(
             pipe,
