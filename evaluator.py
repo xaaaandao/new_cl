@@ -20,7 +20,9 @@ logger = logging.getLogger(__name__)
 
 
 class LinearEvaluator:
-    def __init__(self, config: Config, train_loader, test_loader, average, max_iter, eval_epochs):
+    VALID_FEATURE_TYPES = ('backbone', 'genus_head', 'species_head', 'heads_concat', 'all_concat')
+
+    def __init__(self, config: Config, train_loader, test_loader, average, max_iter, eval_epochs, feature_types=None):
         self.cfg = config
         self.train_loader = train_loader
         self.test_loader = test_loader
@@ -28,11 +30,21 @@ class LinearEvaluator:
         self.max_iter = max_iter
         self.average = average
         self.eval_epochs = eval_epochs
+        self.feature_types = list(feature_types) if feature_types else ['backbone']
+        for ft in self.feature_types:
+            if ft not in self.VALID_FEATURE_TYPES:
+                raise ValueError(f"feature_type invalido: {ft}. Validos: {self.VALID_FEATURE_TYPES}")
 
         self.results_path = os.path.join(self.cfg.train.checkpoint_dir, 'results')
         os.makedirs(self.results_path, exist_ok=True)
-        self.csv_file = f'results+{average}.csv' if self.max_iter == -1 else f'results+{average}+maxiter={self.max_iter}.csv'
-        self.csv_file = os.path.join(self.results_path, self.csv_file)
+
+    def get_csv_file(self, feature_type: str) -> str:
+        """Um CSV de resultados por feature_type, ex: results+macro+genus_head.csv"""
+        name = f'results+{self.average}'
+        if self.max_iter != -1:
+            name += f'+maxiter={self.max_iter}'
+        name += f'+{feature_type}.csv'
+        return os.path.join(self.results_path, name)
 
     def load_backbone(self, checkpoint_path: str, use_pretrained) -> MultiHeadSupConResNet:
         model = MultiHeadSupConResNet(
@@ -58,13 +70,19 @@ class LinearEvaluator:
 
     def extract_features(self, model: MultiHeadSupConResNet, loader):
         """
-        Extrai features do encoder compartilhado (antes das projection heads),
-        junto com os rótulos de gênero e de espécie de cada amostra.
+        Uma unica passada pelo modelo. Retorna (feats, y_genus, y_species), onde feats e um dict:
+          'backbone'     -> [N, dim_backbone]  (encoder compartilhado)
+          'genus_head'   -> [N, feat_dim_genus]    (saida L2-normalizada da head de genero)
+          'species_head' -> [N, feat_dim_species]  (saida L2-normalizada da head de especie)
+          'heads_concat' -> genus_head + species_head
+          'all_concat'   -> backbone + genus_head + species_head
+        Apenas as chaves necessarias para self.feature_types sao montadas.
         """
-        features_list = []
+        buf = {'backbone': [], 'genus_head': [], 'species_head': []}
         genus_labels_list = []
         species_labels_list = []
 
+        model.eval()
         with torch.no_grad():
             for images, genus_labels, species_labels in tqdm(loader, desc="Extraindo Features"):
 
@@ -72,16 +90,23 @@ class LinearEvaluator:
                     images = images[0]
 
                 images = images.to(self.device)
-                feats = model.encoder(images)
+                feat, out = model(images)
 
-                features_list.append(feats.cpu().numpy())
+                buf['backbone'].append(feat.cpu().numpy())
+                buf['genus_head'].append(out['genus'].cpu().numpy())
+                buf['species_head'].append(out['species'].cpu().numpy())
                 genus_labels_list.append(genus_labels.numpy())
                 species_labels_list.append(species_labels.numpy())
 
-        X = np.concatenate(features_list, axis=0)
+        feats = {k: np.concatenate(v, axis=0) for k, v in buf.items()}
+        if 'heads_concat' in self.feature_types or 'all_concat' in self.feature_types:
+            feats['heads_concat'] = np.concatenate([feats['genus_head'], feats['species_head']], axis=1)
+        if 'all_concat' in self.feature_types:
+            feats['all_concat'] = np.concatenate([feats['backbone'], feats['heads_concat']], axis=1)
+
         y_genus = np.concatenate(genus_labels_list, axis=0)
         y_species = np.concatenate(species_labels_list, axis=0)
-        return X, y_genus, y_species
+        return feats, y_genus, y_species
 
     def train_svm(self, X_train, y_train):
         logger.info("Iniciando GridSearch do SVM...")
@@ -126,17 +151,18 @@ class LinearEvaluator:
             'top5_acc': acc5
         }
 
-    def save_results(self, metrics: dict):
+    def save_results(self, metrics: dict, feature_type: str):
+        csv_file = self.get_csv_file(feature_type)
         df_new = pd.DataFrame([metrics])
 
-        if not os.path.exists(self.csv_file):
-            df_new.to_csv(self.csv_file, index=False)
+        if not os.path.exists(csv_file):
+            df_new.to_csv(csv_file, index=False)
         else:
-            df_new.to_csv(self.csv_file, mode='a', header=False, index=False)
+            df_new.to_csv(csv_file, mode='a', header=False, index=False)
 
-        logger.info(f"Resultados salvos: {metrics}")
+        logger.info(f"Resultados salvos em {os.path.basename(csv_file)}: {metrics}")
 
-    def save_n_iters(self, epoch_num, level, n_iters):
+    def save_n_iters(self, epoch_num, level, feature_type, n_iters):
         data = {
             "epoch": epoch_num,
             "level": level,
@@ -146,37 +172,30 @@ class LinearEvaluator:
 
         eval_dir = os.path.join(self.cfg.train.checkpoint_dir, 'eval')
         os.makedirs(eval_dir, exist_ok=True)
-        csv_n_iters_file = os.path.join(eval_dir, f"n_iters.csv")
+        csv_n_iters_file = os.path.join(eval_dir, f"n_iters+{feature_type}.csv")
         if not os.path.exists(csv_n_iters_file):
             df.to_csv(csv_n_iters_file, index=False)
         else:
             df.to_csv(csv_n_iters_file, mode='a', header=False, index=False)
 
-
     def sort_csv_by_epoch(self):
-        if not os.path.exists(self.csv_file):
-            return
+        def epoch_sorter(val):
+            return int(val) if str(val).isdigit() else 999999
 
-        try:
-            logger.info("Reordenando arquivo final de resultados...")
-            df = pd.read_csv(self.csv_file)
+        for feature_type in self.feature_types:
+            csv_file = self.get_csv_file(feature_type)
+            if not os.path.exists(csv_file):
+                continue
 
-            def epoch_sorter(val):
-                if str(val).isdigit():
-                    return int(val)
+            try:
+                logger.info(f"Reordenando {os.path.basename(csv_file)}...")
+                df = pd.read_csv(csv_file)
+                df['sort_key'] = df['epoch'].apply(epoch_sorter)
+                df = df.sort_values(['sort_key', 'level'], kind='stable').drop(columns=['sort_key'])
+                df.to_csv(csv_file, index=False)
+            except Exception as e:
+                logger.error(f"Erro ao reordenar {csv_file}: {e}")
 
-                return 999999
-
-            df['sort_key'] = df['epoch'].apply(epoch_sorter)
-            df = df.sort_values('sort_key')
-            df = df.drop(columns=['sort_key'])
-
-            df.to_csv(self.csv_file, index=False)
-            logger.info("Arquivo results.csv reordenado com sucesso.")
-
-        except Exception as e:
-            logger.error(f"Erro ao reordenar CSV: {e}")
-            
     def run(self, use_pretrained):
         base_dir = Path(self.cfg.train.checkpoint_dir).resolve()
         checkpoints_dir = base_dir / "checkpoints"
@@ -209,22 +228,21 @@ class LinearEvaluator:
                 model = self.load_backbone(ckpt_path, use_pretrained)
 
                 logger.info("Extraindo features de TREINO...")
-                X_train, y_train_genus, y_train_species = self.extract_features(model, self.train_loader)
+                feats_train, yg_train, ys_train = self.extract_features(model, self.train_loader)
 
                 logger.info("Extraindo features de TESTE...")
-                X_test, y_test_genus, y_test_species = self.extract_features(model, self.test_loader)
+                feats_test, yg_test, ys_test = self.extract_features(model, self.test_loader)
 
-                # Avalia o mesmo espaço de features (encoder compartilhado) tanto
-                # para a tarefa de classificar GÊNERO quanto para classificar ESPÉCIE.
-                for level, y_train, y_test in [
-                    ('genus', y_train_genus, y_test_genus),
-                    ('species', y_train_species, y_test_species),
-                ]:
-                    logger.info(f"--- Nível: {level} ---")
-                    clf, n_iters = self.train_svm(X_train, y_train)
-                    metrics = self.compute_metrics(clf, X_test, y_test, epoch_num, level)
-                    self.save_results(metrics)
-                    self.save_n_iters(epoch_num, level, n_iters)
+                for feat_type in self.feature_types:
+                    for level, y_train, y_test in [
+                        ('genus', yg_train, yg_test),
+                        ('species', ys_train, ys_test),
+                    ]:
+                        logger.info(f"--- features={feat_type} | alvo={level} ---")
+                        clf, n_iters = self.train_svm(feats_train[feat_type], y_train)
+                        metrics = self.compute_metrics(clf, feats_test[feat_type], y_test, epoch_num, level)
+                        self.save_results(metrics, feat_type)
+                        self.save_n_iters(epoch_num, level, feat_type, n_iters)
 
             except Exception as e:
                 logger.error(f"Falha ao avaliar checkpoint {ckpt_path}: {e}")
