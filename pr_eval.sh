@@ -8,8 +8,10 @@ do
     echo "=========================================="
     python main.py --eval --batch_sizes $batch --f1 weighted --use_pretrained
     python main.py --eval --batch_sizes $batch --f1 weighted --use_pretrained --max_iter 10000
-    python main.py --eval --batch_sizes $batch --f1 macro --use_pretrained
-    python main.py --eval --batch_sizes $batch --f1 macro --use_pretrained --max_iter 10000
+    python main.py --eval --batch_sizes $batch --f1 weighted --use_pretrained --feature_type projection
+    python main.py --eval --batch_sizes $batch --f1 weighted --use_pretrained --max_iter 10000 --feature_type projection
+    python main.py --eval --batch_sizes $batch --f1 macro --use_pretrained --feature_type projection
+    python main.py --eval --batch_sizes $batch --f1 macro --use_pretrained --max_iter 10000 --feature_type projection
 done
 
 echo "===================================================="

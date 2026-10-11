@@ -19,7 +19,7 @@ from network import SupConResNet
 logger = logging.getLogger(__name__)
 
 class LinearEvaluator:
-    def __init__(self, config: Config, train_loader, test_loader, average, max_iter, eval_epochs):
+    def __init__(self, config: Config, train_loader, test_loader, average, max_iter, eval_epochs, feature_type):
         self.cfg = config
         self.train_loader = train_loader
         self.test_loader = test_loader
@@ -30,7 +30,10 @@ class LinearEvaluator:
 
         self.results_path = os.path.join(self.cfg.train.checkpoint_dir, 'results')
         os.makedirs(self.results_path, exist_ok=True)
-        self.csv_file = f'results+{average}.csv' if self.max_iter == -1 else f'results+{average}+maxiter={self.max_iter}.csv'
+        self.feature_type = feature_type
+        suffix = f'+{feature_type}'
+        self.csv_file = (f'results+{average}{suffix}.csv' if self.max_iter == -1
+                         else f'results+{average}+maxiter={self.max_iter}{suffix}.csv')
         self.csv_file = os.path.join(self.results_path, self.csv_file)
 
     def load_backbone(self, checkpoint_path: str, use_pretrained: bool) -> SupConResNet:
@@ -50,25 +53,30 @@ class LinearEvaluator:
         
         return model
 
-    def extract_features(self, model: SupConResNet, loader) -> getattr:
-        features_list = []
-        labels_list = []
+    def extract_features(self, model: SupConResNet, loader, feature_type: str = 'backbone'):
+        features_list, labels_list = [], []
 
         with torch.no_grad():
-            for images, labels in tqdm(loader, desc="Extraindo Features"):
-                
+            for images, labels in tqdm(loader, desc=f"Extraindo Features ({feature_type})"):
                 if isinstance(images, list):
                     images = images[0]
-                
                 images = images.to(self.device)
-                feats = model.encoder(images)
-                
-                features_list.append(feats.cpu().numpy())
+
+                feat, proj = model(images)  # feat = backbone (2048), proj = head normalizada (128)
+
+                if feature_type == 'backbone':
+                    out = feat
+                elif feature_type == 'projection':
+                    out = proj
+                elif feature_type == 'both':
+                    out = torch.cat([feat, proj], dim=1)
+                else:
+                    raise ValueError(f"feature_type inválido: {feature_type}")
+
+                features_list.append(out.cpu().numpy())
                 labels_list.append(labels.numpy())
 
-        X = np.concatenate(features_list, axis=0)
-        y = np.concatenate(labels_list, axis=0)
-        return X, y
+        return np.concatenate(features_list), np.concatenate(labels_list)
 
     def train_svm(self, X_train, y_train):
         logger.info("Iniciando GridSearch do SVM...")
@@ -193,10 +201,10 @@ class LinearEvaluator:
                 model = self.load_backbone(ckpt_path, use_pretrained=use_pretrained)
                 
                 logger.info("Extraindo features de TREINO...")
-                X_train, y_train = self.extract_features(model, self.train_loader)
+                X_train, y_train = self.extract_features(model, self.train_loader, self.feature_type)
 
                 logger.info("Extraindo features de TESTE...")
-                X_test, y_test = self.extract_features(model, self.test_loader)
+                X_test, y_test = self.extract_features(model, self.test_loader, self.feature_type)
 
                 clf, n_iters = self.train_svm(X_train, y_train)
                 

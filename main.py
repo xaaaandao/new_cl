@@ -20,6 +20,7 @@ def main():
     parser.add_argument('--f1', nargs=1, choices=["macro", "weighted"], default=["weighted"], help='F1-score weighted ou macro?')
     parser.add_argument('--batch_sizes', type=int, nargs='+', default=[32], help='Lista de batch sizes para executar sequencialmente (preferencialmente múltiplos de 8). Ex: 8 16 32 64 128')
     parser.add_argument('--eval_epochs', type=int, default=-1, help='Número de épocas para avaliar')
+    parser.add_argument('--feature_type', choices=['backbone', 'projection', 'both'], default='backbone', help='Features usadas para treinar o SVM')
     args = parser.parse_args()
 
     if not args.train and not args.eval:
@@ -110,7 +111,7 @@ def main():
             logger.info("Carregando loader de Teste...")
             eval_test_loader = dm.get_loader(test_dir_path, is_contrastive=False, mode='test')
 
-            evaluator = LinearEvaluator(cfg, eval_train_loader, eval_test_loader, average=args.f1[0], max_iter=args.max_iter, eval_epochs = args.eval_epochs)
+            evaluator = LinearEvaluator(cfg, eval_train_loader, eval_test_loader, average=args.f1[0], max_iter=args.max_iter, eval_epochs = args.eval_epochs, feature_type=args.feature_type)
             evaluator.run(args.use_pretrained)
 
 

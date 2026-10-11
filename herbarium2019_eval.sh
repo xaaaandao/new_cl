@@ -6,7 +6,8 @@ do
     echo "=========================================="
     echo "Avaliando com batch_size = $batch..."
     echo "=========================================="
-    python main.py --eval --batch_sizes $batch --f1 weighted --use_pretrained --max_iter 10000 --dataset_name "herbarium2019+min=50"
+    python main.py --eval --batch_sizes $batch --f1 weighted --use_pretrained --max_iter 10000 --dataset_name "herbarium2019+min=50" --eval_epochs 8
+    python main.py --eval --batch_sizes $batch --f1 weighted --use_pretrained --max_iter 10000 --dataset_name "herbarium2019+min=50" --eval_epochs 8 --feature_type projection
 done
 
 echo "===================================================="
