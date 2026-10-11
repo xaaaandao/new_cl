@@ -9,9 +9,13 @@ do
         echo "Avaliando com batch_size = $batch..."
         echo "=========================================="
         python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 weighted --use_pretrained --max_iter 10000
-         python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 weighted
-         python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 macro --use_pretrained --max_iter 10000
-         python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 macro
+        python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 weighted
+        python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 weighted --use_pretrained --max_iter 10000  --feature_types species_head
+        python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 weighted --feature_types species_head
+        python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 macro --use_pretrained --max_iter 10000
+        python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 macro
+        python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 macro --use_pretrained --max_iter 10000  --feature_types species_head
+        python main.py --eval --batch_sizes $batch --loss_weight $loss --f1 macro  --feature_types species_head
 	    
     done
 done
