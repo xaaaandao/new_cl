@@ -2,11 +2,18 @@ from PIL import Image, ImageOps
 import numpy as np
 import random
 import os
+import uuid
 
 class RandomCropWithValidation:
-    def __init__(self, size, min_info_ratio=0.1):
+    def __init__(self, size, save_dir, min_info_ratio=0.1, save_crops = False):
         self.size = size
         self.min_info_ratio = min_info_ratio
+        self._saved = 0
+        self.save_crops = save_crops
+        self.save_dir = os.path.join(save_dir, "validation_crops")
+
+        if self.save_crops:
+            os.makedirs(self.save_dir, exist_ok=True)
 
     def format_image(self, img):
         width, height = img.size
@@ -51,7 +58,12 @@ class RandomCropWithValidation:
         return None
     
     def __call__(self, img):
+        crop = self._crop(img)
+        if self.save_crops:
+            self.save(crop)
+        return crop
 
+    def _crop(self, img):
         return_full_img = self.find_crop(np.array(img))
 
         if return_full_img != None:
@@ -71,4 +83,9 @@ class RandomCropWithValidation:
 
         img_trimmed = self.format_image(trimmed)
         return img_trimmed
+
+    def save(self, img):
+        filename = f"crop_{os.getpid()}_{self._saved:06d}_{uuid.uuid4().hex[:8]}.png"
+        img.save(os.path.join(self.save_dir, filename))
+        self._saved += 1
         

@@ -15,6 +15,7 @@ def main():
     parser.add_argument('--train', action='store_true', help='Executa o treinamento')
     parser.add_argument('--eval', action='store_true', help='Executa a avaliação')
     parser.add_argument('--use_pretrained', action='store_true', default=False)
+    parser.add_argument('--save_crops', action='store_true', default=False)
     parser.add_argument('--dataset_name', type=str, default="pr_dataset", help='Nome do dataset')
     parser.add_argument('--max_iter', type=int, default=-1, help='Número de iterações do SVM')
     parser.add_argument('--f1', nargs=1, choices=["macro", "weighted"], default=["weighted"], help='F1-score weighted ou macro?')
@@ -86,7 +87,7 @@ def main():
             pass
         
         print(f"Inicializando DataManager e calculando estatísticas em: {train_dir_path}")
-        dm = DataManager(cfg.data, train_dir=train_dir_path, train_config=cfg.train)
+        dm = DataManager(cfg.data, train_dir=train_dir_path, train_config=cfg.train, save_crops=args.save_crops)
 
         if args.train:
             logger.info(">>> INICIANDO TREINAMENTO <<<")

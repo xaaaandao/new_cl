@@ -17,7 +17,7 @@
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="RUN_TOOL" value="" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/main.py" />
-    <option name="PARAMETERS" value="--train --batch_sizes 16 --use_pretrained" />
+    <option name="PARAMETERS" value="--train --batch_sizes 128 --use_pretrained --save_crops" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
