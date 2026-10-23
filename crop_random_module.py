@@ -2,15 +2,23 @@ from PIL import Image, ImageOps
 import numpy as np
 import random
 import os
+import uuid
+
 
 class RandomCropWithValidation:
-    def __init__(self, size, min_info_ratio=0.1):
+    def __init__(self, size, save_dir, min_info_ratio=0.1, save_crops=False):
         self.size = size
         self.min_info_ratio = min_info_ratio
+        self._saved = 0
+        self.save_crops = save_crops
+        self.save_dir = os.path.join(save_dir, "validation_crops")
+
+        if self.save_crops:
+            os.makedirs(self.save_dir, exist_ok=True)
 
     def format_image(self, img):
         width, height = img.size
-    
+
         if width > self.size or height > self.size:
             left = (width - self.size) // 2
             top = (height - self.size) // 2
@@ -21,37 +29,42 @@ class RandomCropWithValidation:
             width, height = img.size
             pad_width = max(0, self.size - width)
             pad_height = max(0, self.size - height)
-            
+
             padding = (
                 pad_width // 2,  # Esquerda
                 pad_height // 2,  # Superior
                 pad_width - pad_width // 2,  # Direita
                 pad_height - pad_height // 2  # Inferior
             )
-            
+
             img = ImageOps.expand(img, padding, fill=(255, 255, 255))
-        
+
         return img
 
     def find_crop(self, img_array):
         for idx in range(10):  # Limitar o número de tentativas
             x = random.randint(0, img_array.shape[1] - self.size)
             y = random.randint(0, img_array.shape[0] - self.size)
-            
+
             crop = img_array[y:y + self.size, x:x + self.size]
 
             information = np.sum(np.all(crop < 255, axis=-1))
             total_pixels = crop.shape[0] * crop.shape[1]
-            
+
             if information / total_pixels >= self.min_info_ratio:
                 return Image.fromarray(crop)
             else:
                 pass
 
         return None
-    
-    def __call__(self, img):
 
+    def __call__(self, img):
+        crop = self._crop(img)
+        if self.save_crops:
+            self.save(crop)
+        return crop
+
+    def _crop(self, img):
         return_full_img = self.find_crop(np.array(img))
 
         if return_full_img != None:
@@ -71,4 +84,8 @@ class RandomCropWithValidation:
 
         img_trimmed = self.format_image(trimmed)
         return img_trimmed
-        
+
+    def save(self, img):
+        filename = f"crop_{os.getpid()}_{self._saved:06d}_{uuid.uuid4().hex[:8]}.png"
+        img.save(os.path.join(self.save_dir, filename))
+        self._saved += 1

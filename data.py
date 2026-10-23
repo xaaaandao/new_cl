@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 from config import DataConfig, TrainConfig
 from typing import Tuple
 from tqdm import tqdm
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ class GenusSpeciesImageFolder(datasets.ImageFolder):
 
 
 class DataManager:
-    def __init__(self, config: DataConfig, train_dir: str, train_config: TrainConfig):
+    def __init__(self, config: DataConfig, train_dir: str, train_config: TrainConfig, save_crops: bool = False):
         self.cfg = config
         self.train_dir = train_dir
         self.train_config = train_config
@@ -71,6 +72,7 @@ class DataManager:
         self.mean, self.std = self._get_mean_std()
         self.cfg.mean = self.mean
         self.cfg.std = self.std
+        self.save_crops = save_crops
 
         logger.info(f"Normalização definida -> Mean: {self.mean}, Std: {self.std}")
 
@@ -124,8 +126,11 @@ class DataManager:
         transform_list = []
 
         if self.train_config.crop_with_validation:
-            transform_list.append(
-                RandomCropWithValidation(size=size, min_info_ratio=self.train_config.crop_validation_info_ratio))
+            crop = RandomCropWithValidation(size=size,
+                                            min_info_ratio=self.train_config.crop_validation_info_ratio,
+                                            save_dir=self.train_config.checkpoint_dir,
+                                            save_crops=self.save_crops)
+            transform_list.append(crop)
         else:
             transform_list.append(transforms.Resize((size, size)))
 
