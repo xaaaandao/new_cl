@@ -1,13 +1,15 @@
 #!/bin/bash
 
 # Define os valores de batch que você quer testar
-for batch in 8 16 32 256 512
+for batch in 8
 do
     echo "=========================================="
     echo "Avaliando com batch_size = $batch..."
     echo "=========================================="
-    python main.py --eval --batch_sizes $batch --f1 weighted --use_pretrained --max_iter 10000 --dataset_name "herbarium2019+min=50" --eval_epochs 8
-    python main.py --eval --batch_sizes $batch --f1 weighted --use_pretrained --max_iter 10000 --dataset_name "herbarium2019+min=50" --eval_epochs 8 --feature_type projection
+    python main.py --eval --batch_sizes $batch --f1 weighted --use_pretrained --max_iter 10000 --dataset_name "102flowers" --eval_epochs 8
+    python main.py --eval --batch_sizes $batch --f1 weighted --use_pretrained --max_iter 10000 --dataset_name "102flowers" --eval_epochs 8 --feature_type projection
+    python main.py --eval --batch_sizes $batch --f1 weighted --use_pretrained --max_iter 10000 --dataset_name "102segmentations" --eval_epochs 8
+    python main.py --eval --batch_sizes $batch --f1 weighted --use_pretrained --max_iter 10000 --dataset_name "102segmentations" --eval_epochs 8 --feature_type projection
 done
 
 echo "===================================================="
