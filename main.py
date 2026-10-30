@@ -25,6 +25,8 @@ def main():
     parser.add_argument('--feature_types', nargs='+', default=['backbone'],
                         choices=['backbone', 'genus_head', 'species_head', 'heads_concat', 'all_concat'],
                         help='Features usadas para treinar o SVM (cada uma e avaliada para genero e especie)')
+    parser.add_argument('--epochs', type=int, default=2000, help='Número de épocas')
+    parser.add_argument('--val_crop', type=float, default=0.1, help='% de informação do crop')
     args = parser.parse_args()
 
     if not args.train and not args.eval:
@@ -35,9 +37,11 @@ def main():
 
     if args.loss_weight < 1:
         cfg.model.loss_weight_genus = args.loss_weight
-        cfg.data.dataset_name = args.dataset_name
         cfg.model.loss_weight_species = 1 - args.loss_weight
     cfg.model.use_pretrained = args.use_pretrained
+    cfg.train.epochs = args.epochs
+    cfg.train.crop_validation_info_ratio = args.val_crop
+    cfg.data.dataset_name = args.dataset_name
 
     if args.batch_sizes is None:
         default_batch = cfg.data.batch_size
