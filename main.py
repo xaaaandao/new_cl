@@ -22,6 +22,8 @@ def main():
     parser.add_argument('--batch_sizes', type=int, nargs='+', default=[32], help='Lista de batch sizes para executar sequencialmente (preferencialmente múltiplos de 8). Ex: 8 16 32 64 128')
     parser.add_argument('--eval_epochs', type=int, default=-1, help='Número de épocas para avaliar')
     parser.add_argument('--feature_type', choices=['backbone', 'projection', 'both'], default='backbone', help='Features usadas para treinar o SVM')
+    parser.add_argument('--epochs', type=int, default=2000, help='Número de épocas')
+    parser.add_argument('--val_crop', type=float, default=0.1, help='% de informação do crop')
     args = parser.parse_args()
 
     if not args.train and not args.eval:
@@ -30,6 +32,8 @@ def main():
     
     cfg = Config()
     cfg.use_pretrained = args.use_pretrained
+    cfg.train.epochs = args.epochs
+    cfg.train.crop_validation_info_ratio = args.val_crop
     cfg.data.dataset_name = args.dataset_name
     
     if args.batch_sizes is None:
